@@ -135,6 +135,14 @@ def linear_activation_forward(A_prev, W, b, activation):
         A, activation_cache = softmax(Z)
  
     assert (A.shape == (W.shape[0], A_prev.shape[1]))
+    
+    if keep_prob < 1:
+        D = np.random.rand(A.shape[0],A.shape[1])  # Step 1: initialize matrix D = np.random.rand(..., ...)
+        D = (D<keep_prob)                          # Step 2: convert entries of D to 0 or 1 (using keep_prob as the threshold)
+        A = A*D                                    # Step 3: shut down some neurons of A
+        A = A/keep_prob                            # Step 4: scale the value of neurons that haven't been shut down
+        activation_cache.append(D)
+        
     cache = (linear_cache, activation_cache)
 
     return A, cache
@@ -158,25 +166,12 @@ def forward_propagation(X, parameters, activation_list , keep_prob = 1):
     L = len(parameters) // 2  # number of layers in the neural network
     
     # Implement [LINEAR -> RELU]*(L-1). Add "cache" to the "caches" list.
-    if keep_prob ==1:
-        for l in range(1, L):
-            A_prev = A 
-            A, cache = linear_activation_forward(A_prev, parameters['W' + str(l)] , parameters['b' + str(l)], activation_list[l-1])
-            caches.append(cache)
+    np.random.seed(1)
+    for l in range(1, L):
+        A_prev = A 
+        A, cache = linear_activation_forward(A_prev, parameters['W' + str(l)] , parameters['b' + str(l)], activation_list[l-1])
+        caches.append(cache)
             
-    elif keep_prob < 1:
-        
-        np.random.seed(1)
-        for l in range(1, L):
-            A_prev = A  
-            A, cache = linear_activation_forward(A_prev, parameters['W' + str(l)] , parameters['b' + str(l)], activation_list[l-1])
-            D = np.random.rand(A.shape[0],A.shape[1])  # Step 1: initialize matrix D = np.random.rand(..., ...)
-            D = (D<keep_prob)                          # Step 2: convert entries of D to 0 or 1 (using keep_prob as the threshold)
-            A = A*D                                    # Step 3: shut down some neurons of A
-            A = A/keep_prob                            # Step 4: scale the value of neurons that haven't been shut down
-            
-            caches.append(cache)
-            chases.append(D)
 
     # Implement LINEAR -> SIGMOID. Add "cache" to the "caches" list.
     AL, cache = linear_activation_forward(A, parameters['W' + str(L)] , parameters['b' + str(L)], activation_list[L-1])
@@ -214,8 +209,8 @@ def compute_cost(AL, Y, cost_type, parameters = [], lambd = 0 , onehot = False, 
         cost = -float(np.sum(Y*np.log(AL)+(1-Y)*np.log(1-AL))/m)
         #cost = -np.sum(Y*np.log(AL)+(1-Y)*np.log(1-AL))/m
     elif cost_type =="multinolli" and onehot==False:
-        cost = -np.sum(np.log(AL).ravel()[(Y-Y_start)*K+range(m)])/m
-       
+        #cost = -np.sum(np.log(AL).ravel()[(Y-Y_start)*K+range(m)])/m
+        cost = -np.sum(np.log(AL[(Y-Y_start),range(m)]))/m
     cost = np.squeeze(cost)      # To make sure your cost's shape is what we expect (e.g. this turns [[17]] into 17).
 
     cost += L2_regularization_cost
@@ -268,9 +263,9 @@ def softmax_backward(AL,Y,Y_start, activation_cache):
     K,m = activation_cache.shape
     
     I = np.zeros(K,m)
-    I.ravel()[(Y-Y_start)*K+range(m)] = 1
-    
-    dZ = 
+    #I.ravel()[(Y-Y_start)*K+range(m)] = 1
+    I[Y-Y_start,range(m)] = 1; 
+    dZ = AL - I
     
     return dZ
 
