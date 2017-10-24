@@ -209,7 +209,7 @@ def compute_cost(AL, Y, cost_type, parameters = [], lambd = 0 , onehot = False, 
     if cost_type == "bernoulli":
         cost = -float(np.sum(Y*np.log(AL)+(1-Y)*np.log(1-AL))/m)
         #cost = -np.sum(Y*np.log(AL)+(1-Y)*np.log(1-AL))/m
-    elif cost_type =="multinolli" and onehot==False:
+    elif cost_type =="multinoulli" and onehot==False:
         #cost = -np.sum(np.log(AL).ravel()[(Y-Y_start)*K+range(m)])/m
         cost = -np.sum(np.log(AL[(Y-Y_start),range(m)]))/m
     cost = np.squeeze(cost)      # To make sure your cost's shape is what we expect (e.g. this turns [[17]] into 17).
@@ -364,7 +364,7 @@ def backward_propagation(AL, Y, caches, cost_type = "multinoulli" ,activation_li
         
     return grads
 #%%
-def initialize_velocity(parameters):
+def initialize_optimizer(parameters,optimizer):
     """
     Initializes the velocity as a python dictionary with:
                 - keys: "dW1", "db1", ..., "dWL", "dbL" 
@@ -378,56 +378,35 @@ def initialize_velocity(parameters):
     v -- python dictionary containing the current velocity.
                     v['dW' + str(l)] = velocity of dWl
                     v['db' + str(l)] = velocity of dbl
-    """
-    
-    L = len(parameters) // 2 # number of layers in the neural networks
-    v = {}
-    
-    # Initialize velocity
-    for l in range(L):
-        ### START CODE HERE ### (approx. 2 lines)
-        v["dW" + str(l+1)] = np.zeros((parameters["W"+str(l+1)].shape))
-        v["db" + str(l+1)] = np.zeros((parameters["b"+str(l+1)].shape))
-        ### END CODE HERE ###
-        
-    return v
-#%%
-def initialize_adam(parameters) :
-    """
-    Initializes v and s as two python dictionaries with:
-                - keys: "dW1", "db1", ..., "dWL", "dbL" 
-                - values: numpy arrays of zeros of the same shape as the corresponding gradients/parameters.
-    
-    Arguments:
-    parameters -- python dictionary containing your parameters.
-                    parameters["W" + str(l)] = Wl
-                    parameters["b" + str(l)] = bl
-    
-    Returns: 
-    v -- python dictionary that will contain the exponentially weighted average of the gradient.
-                    v["dW" + str(l)] = ...
-                    v["db" + str(l)] = ...
+                    
     s -- python dictionary that will contain the exponentially weighted average of the squared gradient.
                     s["dW" + str(l)] = ...
                     s["db" + str(l)] = ...
-
     """
-    
     L = len(parameters) // 2 # number of layers in the neural networks
     v = {}
     s = {}
     
-    # Initialize v, s. Input: "parameters". Outputs: "v, s".
-    for l in range(L):
-
-        v["dW" + str(l+1)] = np.zeros((parameters["W" + str(l+1)].shape))
-        v["db" + str(l+1)] = np.zeros((parameters["b" + str(l+1)].shape))
-        s["dW" + str(l+1)] = np.zeros((parameters["W" + str(l+1)].shape))
-        s["db" + str(l+1)] = np.zeros((parameters["b" + str(l+1)].shape))
+    if optimizer == 'gd':
+        pass  # no initialization required for gradient descent
     
-    return v, s  
+    elif optimizer == 'momentum':
+        # Initialize velocity
+        for l in range(L):
+            v["dW" + str(l+1)] = np.zeros((parameters["W"+str(l+1)].shape))
+            v["db" + str(l+1)] = np.zeros((parameters["b"+str(l+1)].shape))
+            
+    elif optimizer == 'adam': 
+        # Initialize v, s. Input: "parameters". Outputs: "v, s".
+        for l in range(L):
+            v["dW" + str(l+1)] = np.zeros((parameters["W" + str(l+1)].shape))
+            v["db" + str(l+1)] = np.zeros((parameters["b" + str(l+1)].shape))
+            s["dW" + str(l+1)] = np.zeros((parameters["W" + str(l+1)].shape))
+            s["db" + str(l+1)] = np.zeros((parameters["b" + str(l+1)].shape))
+            
+    return v, s
 #%%
-def update_parameters(optimizer, parameters, grads, learning_rate = 0.01, v, beta, t,
+def update_parameters(optimizer, parameters, grads, learning_rate = 0.01, v, beta, s, t,
                       beta1 = 0.9, beta2 = 0.999,  epsilon = 1e-8):
     """
     Update parameters using gradient descent
@@ -464,8 +443,7 @@ def update_parameters(optimizer, parameters, grads, learning_rate = 0.01, v, bet
         for l in range(L):
             parameters["W" + str(l+1)] = parameters["W" + str(l+1)] - learning_rate*grads["dW" + str(l+1)]
             parameters["b" + str(l+1)] = parameters["b" + str(l+1)] - learning_rate*grads["db" + str(l+1)]
-        return parameters
-    
+
     elif optimizer =='momentum':
         for l in range(L):
             # compute velocities
@@ -475,10 +453,8 @@ def update_parameters(optimizer, parameters, grads, learning_rate = 0.01, v, bet
             # update parameters
             parameters["W" + str(l+1)] -=learning_rate*v["dW" + str(l+1)]
             parameters["b" + str(l+1)] -=learning_rate*v["db" + str(l+1)]
-        
-        return parameters, v
             
-    elif optimizer =='Adam': 
+    elif optimizer =='adam': 
         v_corrected = {}        # Initializing first moment estimate, python dictionary
         s_corrected = {}        # Initializing second moment estimate, python dictionary
         
@@ -503,7 +479,7 @@ def update_parameters(optimizer, parameters, grads, learning_rate = 0.01, v, bet
             parameters["W" + str(l+1)] -= learning_rate*v_corrected["dW" + str(l+1)]/(np.sqrt(s_corrected["dW" + str(l+1)])+epsilon)
             parameters["b" + str(l+1)] -= learning_rate*v_corrected["db" + str(l+1)]/(np.sqrt(s_corrected["db" + str(l+1)])+epsilon)
         
-        return parameters, v, s
+    return parameters, v, s
 #%%
 def random_mini_batches(X, Y, mini_batch_size = 64, seed = 0):
     """
@@ -530,19 +506,19 @@ def random_mini_batches(X, Y, mini_batch_size = 64, seed = 0):
     # Step 2: Partition (shuffled_X, shuffled_Y). Minus the end case.
     num_complete_minibatches = math.floor(m/mini_batch_size) # number of mini batches of size mini_batch_size in your partitionning
     for k in range(0, num_complete_minibatches):
-        ### START CODE HERE ### (approx. 2 lines)
+        
         mini_batch_X = shuffled_X[:,k*mini_batch_size:(k+1)*mini_batch_size]
         mini_batch_Y = shuffled_Y[:,k*mini_batch_size:(k+1)*mini_batch_size]
-        ### END CODE HERE ###
+        
         mini_batch = (mini_batch_X, mini_batch_Y)
         mini_batches.append(mini_batch)
     
     # Handling the end case (last mini-batch < mini_batch_size)
     if m % mini_batch_size != 0:
-        ### START CODE HERE ### (approx. 2 lines)
+        
         mini_batch_X = shuffled_X[:,mini_batch_size*num_complete_minibatches:m]
         mini_batch_Y = shuffled_Y[:,mini_batch_size*num_complete_minibatches:m]
-        ### END CODE HERE ###
+        
         mini_batch = (mini_batch_X, mini_batch_Y)
         mini_batches.append(mini_batch)
     
@@ -559,18 +535,17 @@ def predict(parameters, X, activation_list):
     Returns
     predictions -- vector of predictions of our model (red: 0 / blue: 1)
     """
-    
-    # Computes probabilities using forward propagation, and classifies to 0/1 using 0.5 as the threshold.
+    # Computes probabilities using forward propagation, and classifies based on max predicted probability.
     AL, cache = forward_propagation(X, parameters, activation_list)
     predictions = np.argmax(AL,0)
     
     return predictions
 #%%
-def model(X, Y, layers_dims, optimizer, learning_rate = 0.0007, mini_batch_size = 64, beta = 0.9,
+def model(X, Y, layers_dims, activation_list , optimizer, learning_rate = 0.0007, mini_batch_size = 64, beta = 0.9,
           beta1 = 0.9, beta2 = 0.999,  epsilon = 1e-8, num_epochs = 10000, print_cost = True,
           lambd = 0, keep_prob = 1):
     """
-    3-layer neural network model which can be run in different optimizer modes.
+    L-layer feed forward neural network model which can be run in different optimizer modes.
     
     Arguments:
     X -- input data, of shape (2, number of examples)
@@ -592,18 +567,13 @@ def model(X, Y, layers_dims, optimizer, learning_rate = 0.0007, mini_batch_size 
     L = len(layers_dims)             # number of layers in the neural networks
     costs = []                       # to keep track of the cost
     t = 0                            # initializing the counter required for Adam update
-    seed = 10                        # For grading purposes, so that your "random" minibatches are the same as ours
+    seed = 10
     
     # Initialize parameters
-    parameters = initialize_parameters(layers_dims)
+    parameters = initialize_parameters(layers_dims,init_type = 'He', scale_f =0.01, seed=0)
 
     # Initialize the optimizer
-    if optimizer == "gd":
-        pass # no initialization required for gradient descent
-    elif optimizer == "momentum":
-        v = initialize_velocity(parameters)
-    elif optimizer == "adam":
-        v, s = initialize_adam(parameters)
+    v, s = initialize_optimizer(parameters, optimizer)
     
     # Optimization loop
     for i in range(num_epochs):
@@ -613,39 +583,23 @@ def model(X, Y, layers_dims, optimizer, learning_rate = 0.0007, mini_batch_size 
         minibatches = random_mini_batches(X, Y, mini_batch_size, seed)
 
         for minibatch in minibatches:
-
+            
             # Select a minibatch
             (minibatch_X, minibatch_Y) = minibatch
 
             # Forward propagation
-            a3, caches = forward_propagation(minibatch_X, parameters, keep_prob)
+            AL, caches = forward_propagation(minibatch_X, parameters, activation_list, keep_prob)
             
             # Compute cost
-            if lambd == 0:
-                cost = compute_cost(a3, minibatch_Y)
-            else:
-                cost = compute_cost_with_regularization(a3, minibatch_Y, parameters, lambd)
+            cost = compute_cost(AL, minibatch_Y, cost_type, parameters, lambd) 
 
-            # Backward propagation
-            assert(lambd==0 or keep_prob==1)    # it is possible to use both L2 regularization and dropout, 
-                                                # but this assignment will only explore one at a time
-            if lambd == 0 and keep_prob == 1:
-                grads = backward_propagation(minibatch_X, minibatch_Y, caches)
-            elif lambd != 0:
-                grads = backward_propagation_with_regularization(minibatch_X, minibatch_Y, caches, lambd)
-            elif keep_prob < 1:
-                grads = backward_propagation_with_dropout(minibatch_X, minibatch_Y, caches, keep_prob)
-
+            # Backward propagation 
+            grads = backward_propagation(minibatch_X, minibatch_Y, caches)
 
             # Update parameters
-            if optimizer == "gd":
-                parameters = update_parameters_with_gd(parameters, grads, learning_rate)
-            elif optimizer == "momentum":
-                parameters, v = update_parameters_with_momentum(parameters, grads, v, beta, learning_rate)
-            elif optimizer == "adam":
-                t = t + 1 # Adam counter
-                parameters, v, s = update_parameters_with_adam(parameters, grads, v, s,
-                                                               t, learning_rate, beta1, beta2,  epsilon)
+            t = t + 1 # Adam counter
+            parameters, v, s = update_parameters(optimizer, parameters, grads, learning_rate, v, beta, s, t, 
+                                                 beta1, beta2, epsilon)
         
         # Print the cost every 1000 epoch
         if print_cost and i % 1000 == 0:
@@ -687,20 +641,13 @@ def vector_to_dictionary(theta,parameters):
     """
     Unroll all our parameters dictionary from a single vector satisfying our specific required shape.
     """
-    parameters = {}
+    param = {}
     count = 0
     for key in parameters.keys():
-        parameters[key] = theta[count:count+np.prod(parameters[key].shape)-1].reshape(parameters[key].shape)
+        param[key] = theta[count:count+np.prod(parameters[key].shape)-1].reshape(parameters[key].shape)
         count += np.prod(parameters[key].shape)
-# =============================================================================
-#     parameters["b1"] = theta[20:25].reshape((5,1))
-#     parameters["W2"] = theta[25:40].reshape((3,5))
-#     parameters["b2"] = theta[40:43].reshape((3,1))
-#     parameters["W3"] = theta[43:46].reshape((1,3))
-#     parameters["b3"] = theta[46:47].reshape((1,1))
-# =============================================================================
-
-    return parameters
+        
+    return param
 #%%
 def gradients_to_vector(gradients):
     """
@@ -720,7 +667,7 @@ def gradients_to_vector(gradients):
 
     return theta
 #%%
-def gradient_check(parameters, gradients, X, Y, epsilon = 1e-7):
+def gradient_check(parameters, activation_list,cost_type = "multinoulli", gradients, X, Y,Y_start = 0,lambd = 0, epsilon = 1e-7):
     """
     Checks if backward_propagation_n computes correctly the gradient of the cost output by forward_propagation_n
     
@@ -734,7 +681,6 @@ def gradient_check(parameters, gradients, X, Y, epsilon = 1e-7):
     Returns:
     difference -- difference (2) between the approximated gradient and the backward propagation gradient
     """
-    
     # Set-up variables
     parameters_values, _ = dictionary_to_vector(parameters)
     grad = gradients_to_vector(gradients)
@@ -747,31 +693,25 @@ def gradient_check(parameters, gradients, X, Y, epsilon = 1e-7):
     for i in range(num_parameters):
         
         # Compute J_plus[i]. Inputs: "parameters_values, epsilon". Output = "J_plus[i]".
-        # "_" is used because the function you have to outputs two parameters but we only care about the first one
-        ### START CODE HERE ### (approx. 3 lines)
-        thetaplus = np.copy(parameters_values)                 # Step 1
-        thetaplus[i][0] += epsilon                                # Step 2
-        J_plus[i], _ =  forward_propagation_n(X, Y,  vector_to_dictionary(thetaplus))                                   # Step 3
-        ### END CODE HERE ###
+    
+        thetaplus = np.copy(parameters_values)                                                           # Step 1
+        thetaplus[i][0] += epsilon                                                                       # Step 2
+        AL = forward_propagation(X, vector_to_dictionary(thetaplus), activation_list)
+        J_plus[i] =  compute_cost(AL, Y, cost_type, vector_to_dictionary(thetaplus), lambd, Y_start)     # Step 3
         
         # Compute J_minus[i]. Inputs: "parameters_values, epsilon". Output = "J_minus[i]".
-        ### START CODE HERE ### (approx. 3 lines)
-        thetaminus = np.copy(parameters_values)                                     # Step 1
-        thetaminus[i][0] -=  epsilon                              # Step 2        
-        J_minus[i], _ =  forward_propagation_n(X, Y,  vector_to_dictionary(thetaminus))                                 # Step 3
-        ### END CODE HERE ###
+        thetaminus = np.copy(parameters_values)                                                          # Step 1
+        thetaminus[i][0] -=  epsilon                                                                     # Step 2  
+        AL = forward_propagation(X, vector_to_dictionary(thetaminus), activation_list)
+        J_minus[i] =  compute_cost(AL, Y, cost_type, vector_to_dictionary(thetaminus), lambd, Y_start)   # Step 3
         
         # Compute gradapprox[i]
-        ### START CODE HERE ### (approx. 1 line)
         gradapprox[i] =(J_plus[i]-J_minus[i])/(2*epsilon)
-        ### END CODE HERE ###
-    
+        
     # Compare gradapprox to backward propagation gradients by computing difference.
-    ### START CODE HERE ### (approx. 1 line)
-    numerator = np.linalg.norm(grad-gradapprox,ord=2)                                           # Step 1'
-    denominator = np.linalg.norm(grad,ord=2)+np.linalg.norm(gradapprox,ord=2)                                          # Step 2'
-    difference = numerator/denominator                                         # Step 3'
-    ### END CODE HERE ###
+    numerator = np.linalg.norm(grad-gradapprox,ord=2)                              # Step 1'
+    denominator = np.linalg.norm(grad,ord=2)+np.linalg.norm(gradapprox,ord=2)      # Step 2'
+    difference = numerator/denominator                                             # Step 3'
 
     if difference > 1e-7:
         print ("\033[93m" + "There is a mistake in the backward propagation! difference = " + str(difference) + "\033[0m")
