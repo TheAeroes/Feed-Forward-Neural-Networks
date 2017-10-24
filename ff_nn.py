@@ -102,8 +102,9 @@ def ReLU(z):
     Return:
     s -- ReLu(z)
     """
-    s = np.copy(z)
-    s[s<=0] = 0
+   # s = np.copy(z)
+    #s[s<=0] = 0
+    s = np.maximum(0,z);
     cache = z
     return s, cache  
 #%%    
@@ -169,12 +170,12 @@ def forward_propagation(X, parameters, activation_list , keep_prob = 1):
     np.random.seed(1)
     for l in range(1, L):
         A_prev = A 
-        A, cache = linear_activation_forward(A_prev, parameters['W' + str(l)] , parameters['b' + str(l)], activation_list[l-1])
+        A, cache = linear_activation_forward(A_prev, parameters['W' + str(l)] , parameters['b' + str(l)], activation_list[l-1], keep_prob)
         caches.append(cache)
             
 
     # Implement LINEAR -> SIGMOID. Add "cache" to the "caches" list.
-    AL, cache = linear_activation_forward(A, parameters['W' + str(L)] , parameters['b' + str(L)], activation_list[L-1])
+    AL, cache = linear_activation_forward(A, parameters['W' + str(L)] , parameters['b' + str(L)], activation_list[L-1],keep_prob =1)
     caches.append(cache)
     
     
@@ -290,7 +291,7 @@ def linear_activation_backward(dA, cache, activation ):
     """
     linear_cache, activation_cache = cache
     
-    if activation == "relu":
+    if activation == "ReLU":
     
         dZ = relu_backward(dA, activation_cache)
         dA_prev, dW, db = linear_backward(dZ, linear_cache)
@@ -547,7 +548,7 @@ def random_mini_batches(X, Y, mini_batch_size = 64, seed = 0):
     
     return mini_batches
 #%%
-def predict(parameters, X):
+def predict(parameters, X, activation_list):
     """
     Using the learned parameters, predicts a class for each example in X
     
@@ -560,10 +561,8 @@ def predict(parameters, X):
     """
     
     # Computes probabilities using forward propagation, and classifies to 0/1 using 0.5 as the threshold.
-    ### START CODE HERE ### (≈ 2 lines of code)
-    A2, cache = forward_propagation(X, parameters)
-    predictions = A2>0.5
-    ### END CODE HERE ###
+    AL, cache = forward_propagation(X, parameters, activation_list)
+    predictions = np.argmax(AL,0)
     
     return predictions
 #%%
@@ -663,6 +662,63 @@ def model(X, Y, layers_dims, optimizer, learning_rate = 0.0007, mini_batch_size 
 
     return parameters
 
+#%%
+def dictionary_to_vector(parameters):
+    """
+    Roll all our parameters dictionary into a single vector satisfying our specific required shape.
+    """
+    keys = []
+    count = 0
+    for key in parameters.keys():
+        
+        # flatten parameter
+        new_vector = np.reshape(parameters[key], (-1,1))
+        keys = keys + [key]*new_vector.shape[0]
+        
+        if count == 0:
+            theta = new_vector
+        else:
+            theta = np.concatenate((theta, new_vector), axis=0)
+        count = count + 1
+
+    return theta, keys
+#%%
+def vector_to_dictionary(theta,parameters):
+    """
+    Unroll all our parameters dictionary from a single vector satisfying our specific required shape.
+    """
+    parameters = {}
+    count = 0
+    for key in parameters.keys():
+        parameters[key] = theta[count:count+np.prod(parameters[key].shape)-1].reshape(parameters[key].shape)
+        count += np.prod(parameters[key].shape)
+# =============================================================================
+#     parameters["b1"] = theta[20:25].reshape((5,1))
+#     parameters["W2"] = theta[25:40].reshape((3,5))
+#     parameters["b2"] = theta[40:43].reshape((3,1))
+#     parameters["W3"] = theta[43:46].reshape((1,3))
+#     parameters["b3"] = theta[46:47].reshape((1,1))
+# =============================================================================
+
+    return parameters
+#%%
+def gradients_to_vector(gradients):
+    """
+    Roll all our gradients dictionary into a single vector satisfying our specific required shape.
+    """
+    
+    count = 0
+    for key in gradients.keys()
+        # flatten parameter
+        new_vector = np.reshape(gradients[key], (-1,1))
+        
+        if count == 0:
+            theta = new_vector
+        else:
+            theta = np.concatenate((theta, new_vector), axis=0)
+        count = count + 1
+
+    return theta
 #%%
 def gradient_check(parameters, gradients, X, Y, epsilon = 1e-7):
     """
