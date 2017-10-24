@@ -5,7 +5,7 @@ Created on Thu Oct 12 08:54:16 2017
 @author: Eyas
 """
 #%%
-def initialize_parameters(layer_dims, init_type = 'random' , scale_f = 0.01):
+def initialize_parameters(layer_dims, init_type = 'random' , scale_f = 0.01, seed = 0):
     """
     Arguments:
     layer_dims -- python array (list) containing the dimensions of each layer in our network
@@ -15,7 +15,7 @@ def initialize_parameters(layer_dims, init_type = 'random' , scale_f = 0.01):
                     Wl -- weight matrix of shape (layer_dims[l], layer_dims[l-1])
                     bl -- bias vector of shape (layer_dims[l], 1)
     """
-    np.random.seed(3)
+    np.random.seed(seed)
     parameters = {}
     L = len(layer_dims)   # number of layers in the network
     
@@ -92,7 +92,7 @@ def softmax(z):
     return s , cache
 
 #%%
-def ReLu(z):
+def ReLU(z):
     """
     Compute the ReLu of z
     
@@ -105,9 +105,9 @@ def ReLu(z):
     s = np.copy(z)
     s[s<=0] = 0
     cache = z
-    return s, chache  
+    return s, cache  
 #%%    
-def linear_activation_forward(A_prev, W, b, activation):
+def linear_activation_forward(A_prev, W, b, activation, keep_prob =1):
     """
     Implement the forward propagation for the LINEAR->ACTIVATION layer
 
@@ -128,8 +128,8 @@ def linear_activation_forward(A_prev, W, b, activation):
     if activation == "sigmoid":
         A, activation_cache = sigmoid(Z)
 
-    elif activation == "relu":
-        A, activation_cache = relu(Z)
+    elif activation == "ReLU":
+        A, activation_cache = ReLU(Z)
     
     elif activation == "softmax"
         A, activation_cache = softmax(Z)
@@ -259,13 +259,9 @@ def sigmoid_backward(dA, activation_cache):
     return dZ
 
 #%%
-def softmax_backward(AL,Y,Y_start, activation_cache):    
-    K,m = activation_cache.shape
-    
-    I = np.zeros(K,m)
-    #I.ravel()[(Y-Y_start)*K+range(m)] = 1
-    I[Y-Y_start,range(m)] = 1; 
-    dZ = AL - I
+def softmax_backward(dAL,activation_cache):    
+
+    dZ = activation_cache - dAL
     
     return dZ
 
@@ -278,7 +274,7 @@ def log_sum_exp(Z):
     
     return log_s_e
 #%%
-def linear_activation_backward(dA, cache, activation , Y =[], Y_start = 0):
+def linear_activation_backward(dA, cache, activation ):
     """
     Implement the backward propagation for the LINEAR->ACTIVATION layer.
     
@@ -331,13 +327,15 @@ def backward_propagation(AL, Y, caches, cost_type = "multinoulli" ,activation_li
     grads = {}
     L = len(caches) # the number of layers
     K, m = AL.shape
-    Y = Y.reshape(AL.shape) # after this line, Y is the same shape as AL
     
     # Initializing the backpropagation
+    
     if cost_type == "bernoulli":
+        Y = Y.reshape(AL.shape) # after this line, Y is the same shape as AL
         dAL = - (np.divide(Y, AL) - np.divide(1 - Y, 1 - AL))
     elif cost_type == "multinoulli":
-        dAL = AL
+        I = np.zeros(K,m); I(Y-Y_start,range(m)) = 1
+        dAL = I
     
     current_cache = caches[L-1]
     grads["dA" + str(L)], grads["dW" + str(L)], grads["db" + str(L)] = linear_activation_backward(dAL, current_cache, activation_list[L-1])
@@ -345,169 +343,25 @@ def backward_propagation(AL, Y, caches, cost_type = "multinoulli" ,activation_li
     for l in reversed(range(L-1)):
         # lth layer: (RELU -> LINEAR) gradients.
         # Inputs: "grads["dA" + str(l + 2)], caches". Outputs: "grads["dA" + str(l + 1)] , grads["dW" + str(l + 1)] , grads["db" + str(l + 1)] 
+    
+        if keep_prob < 1:
+            grads["dA" + str(l + 2)] *= current_cache[1][-1] # Step 1: Apply mask D  to shut down the same neurons as during the forward propagation
+            grads["dA" + str(l + 2)] /= keep_prob            # Step 2: Scale the value of neurons that haven't been shut down
+        
+        
         current_cache = caches[l]
         dA_prev_temp, dW_temp, db_temp = linear_activation_backward(grads["dA" + str(l + 2)], current_cache, activation_list[l + 1])
-        grads["dA" + str(l + 1)] = dA_prev_temp
-        grads["dW" + str(l + 1)] = dW_temp
+        
+        grads["dA" + str(l + 1)] = dA_prev_temp 
+        
+        if lambd ==0: 
+            grads["dW" + str(l + 1)] = dW_temp
+        else:
+            grads["dW" + str(l + 1)] = dW_temp + current_cache[0][1]*lambd/m # adding l2 regularization term
+            
         grads["db" + str(l + 1)] = db_temp
         
     return grads
-#%%
-def backward_propagation_with_regularization(X, Y, cache, lambd):
-    """
-    Implements the backward propagation of our baseline model to which we added an L2 regularization.
-    
-    Arguments:
-    X -- input dataset, of shape (input size, number of examples)
-    Y -- "true" labels vector, of shape (output size, number of examples)
-    cache -- cache output from forward_propagation()
-    lambd -- regularization hyperparameter, scalar
-    
-    Returns:
-    gradients -- A dictionary with the gradients with respect to each parameter, activation and pre-activation variables
-    """
-    
-    m = X.shape[1]
-    (Z1, A1, W1, b1, Z2, A2, W2, b2, Z3, A3, W3, b3) = cache
-    
-    dZ3 = A3 - Y
-    
-    ### START CODE HERE ### (approx. 1 line)
-    dW3 = 1./m * np.dot(dZ3, A2.T) + W3*lambd/m
-    ### END CODE HERE ###
-    db3 = 1./m * np.sum(dZ3, axis=1, keepdims = True)
-    
-    dA2 = np.dot(W3.T, dZ3)
-    dZ2 = np.multiply(dA2, np.int64(A2 > 0))
-    ### START CODE HERE ### (approx. 1 line)
-    dW2 = 1./m * np.dot(dZ2, A1.T) + W2*lambd/m
-    ### END CODE HERE ###
-    db2 = 1./m * np.sum(dZ2, axis=1, keepdims = True)
-    
-    dA1 = np.dot(W2.T, dZ2)
-    dZ1 = np.multiply(dA1, np.int64(A1 > 0))
-    ### START CODE HERE ### (approx. 1 line)
-    dW1 = 1./m * np.dot(dZ1, X.T) + W1*lambd/m
-    ### END CODE HERE ###
-    db1 = 1./m * np.sum(dZ1, axis=1, keepdims = True)
-    
-    gradients = {"dZ3": dZ3, "dW3": dW3, "db3": db3,"dA2": dA2,
-                 "dZ2": dZ2, "dW2": dW2, "db2": db2, "dA1": dA1, 
-                 "dZ1": dZ1, "dW1": dW1, "db1": db1}
-    
-    return gradients
-#%%
-def backward_propagation_with_dropout(X, Y, cache, keep_prob):
-    """
-    Implements the backward propagation of our baseline model to which we added dropout.
-    
-    Arguments:
-    X -- input dataset, of shape (2, number of examples)
-    Y -- "true" labels vector, of shape (output size, number of examples)
-    cache -- cache output from forward_propagation_with_dropout()
-    keep_prob - probability of keeping a neuron active during drop-out, scalar
-    
-    Returns:
-    gradients -- A dictionary with the gradients with respect to each parameter, activation and pre-activation variables
-    """
-    
-    m = X.shape[1]
-    (Z1, D1, A1, W1, b1, Z2, D2, A2, W2, b2, Z3, A3, W3, b3) = cache
-    
-    dZ3 = A3 - Y
-    dW3 = 1./m * np.dot(dZ3, A2.T)
-    db3 = 1./m * np.sum(dZ3, axis=1, keepdims = True)
-    dA2 = np.dot(W3.T, dZ3)
-    ### START CODE HERE ### (≈ 2 lines of code)
-    dA2 = dA2*D2              # Step 1: Apply mask D2 to shut down the same neurons as during the forward propagation
-    dA2 = dA2/keep_prob             # Step 2: Scale the value of neurons that haven't been shut down
-    ### END CODE HERE ###
-    dZ2 = np.multiply(dA2, np.int64(A2 > 0))
-    dW2 = 1./m * np.dot(dZ2, A1.T)
-    db2 = 1./m * np.sum(dZ2, axis=1, keepdims = True)
-    
-    dA1 = np.dot(W2.T, dZ2)
-    ### START CODE HERE ### (≈ 2 lines of code)
-    dA1 *=D1               # Step 1: Apply mask D1 to shut down the same neurons as during the forward propagation
-    dA1 /= keep_prob              # Step 2: Scale the value of neurons that haven't been shut down
-    ### END CODE HERE ###
-    dZ1 = np.multiply(dA1, np.int64(A1 > 0))
-    dW1 = 1./m * np.dot(dZ1, X.T)
-    db1 = 1./m * np.sum(dZ1, axis=1, keepdims = True)
-    
-    gradients = {"dZ3": dZ3, "dW3": dW3, "db3": db3,"dA2": dA2,
-                 "dZ2": dZ2, "dW2": dW2, "db2": db2, "dA1": dA1, 
-                 "dZ1": dZ1, "dW1": dW1, "db1": db1}
-    
-    return gradients
-#%%
-def update_parameters(parameters, grads, learning_rate):
-    """
-    Update parameters using gradient descent
-    
-    Arguments:
-    parameters -- python dictionary containing your parameters 
-    grads -- python dictionary containing your gradients, output of L_model_backward
-    
-    Returns:
-    parameters -- python dictionary containing your updated parameters 
-                  parameters["W" + str(l)] = ... 
-                  parameters["b" + str(l)] = ...
-    """
-    
-    L = len(parameters) // 2 # number of layers in the neural network
-
-    # Update rule for each parameter. Use a for loop.
-    ### START CODE HERE ### (≈ 3 lines of code)
-    for l in range(L):
-        parameters["W" + str(l+1)] = parameters["W" + str(l+1)] - learning_rate*grads["dW" + str(l+1)]
-        parameters["b" + str(l+1)] = parameters["b" + str(l+1)] - learning_rate*grads["db" + str(l+1)]
-    ### END CODE HERE ###
-        
-    return parameters
-#%%
-def random_mini_batches(X, Y, mini_batch_size = 64, seed = 0):
-    """
-    Creates a list of random minibatches from (X, Y)
-    
-    Arguments:
-    X -- input data, of shape (input size, number of examples)
-    Y -- true "label" vector (1 for blue dot / 0 for red dot), of shape (1, number of examples)
-    mini_batch_size -- size of the mini-batches, integer
-    
-    Returns:
-    mini_batches -- list of synchronous (mini_batch_X, mini_batch_Y)
-    """
-    
-    np.random.seed(seed)            # To make your "random" minibatches the same as ours
-    m = X.shape[1]                  # number of training examples
-    mini_batches = []
-        
-    # Step 1: Shuffle (X, Y)
-    permutation = list(np.random.permutation(m))
-    shuffled_X = X[:, permutation]
-    shuffled_Y = Y[:, permutation].reshape((1,m))
-
-    # Step 2: Partition (shuffled_X, shuffled_Y). Minus the end case.
-    num_complete_minibatches = math.floor(m/mini_batch_size) # number of mini batches of size mini_batch_size in your partitionning
-    for k in range(0, num_complete_minibatches):
-        ### START CODE HERE ### (approx. 2 lines)
-        mini_batch_X = shuffled_X[:,k*mini_batch_size:(k+1)*mini_batch_size]
-        mini_batch_Y = shuffled_Y[:,k*mini_batch_size:(k+1)*mini_batch_size]
-        ### END CODE HERE ###
-        mini_batch = (mini_batch_X, mini_batch_Y)
-        mini_batches.append(mini_batch)
-    
-    # Handling the end case (last mini-batch < mini_batch_size)
-    if m % mini_batch_size != 0:
-        ### START CODE HERE ### (approx. 2 lines)
-        mini_batch_X = shuffled_X[:,mini_batch_size*num_complete_minibatches:m]
-        mini_batch_Y = shuffled_Y[:,mini_batch_size*num_complete_minibatches:m]
-        ### END CODE HERE ###
-        mini_batch = (mini_batch_X, mini_batch_Y)
-        mini_batches.append(mini_batch)
-    
-    return mini_batches
 #%%
 def initialize_velocity(parameters):
     """
@@ -537,44 +391,6 @@ def initialize_velocity(parameters):
         
     return v
 #%%
-def update_parameters_with_momentum(parameters, grads, v, beta, learning_rate):
-    """
-    Update parameters using Momentum
-    
-    Arguments:
-    parameters -- python dictionary containing your parameters:
-                    parameters['W' + str(l)] = Wl
-                    parameters['b' + str(l)] = bl
-    grads -- python dictionary containing your gradients for each parameters:
-                    grads['dW' + str(l)] = dWl
-                    grads['db' + str(l)] = dbl
-    v -- python dictionary containing the current velocity:
-                    v['dW' + str(l)] = ...
-                    v['db' + str(l)] = ...
-    beta -- the momentum hyperparameter, scalar
-    learning_rate -- the learning rate, scalar
-    
-    Returns:
-    parameters -- python dictionary containing your updated parameters 
-    v -- python dictionary containing your updated velocities
-    """
-
-    L = len(parameters) // 2 # number of layers in the neural networks
-    
-    # Momentum update for each parameter
-    for l in range(L):
-        
-        ### START CODE HERE ### (approx. 4 lines)
-        # compute velocities
-        v["dW" + str(l+1)] = beta*v["dW" + str(l+1)] +(1-beta)*grads["dW" + str(l+1)]
-        v["db" + str(l+1)] = beta*v["db" + str(l+1)] +(1-beta)*grads["db" + str(l+1)]
-        # update parameters
-        parameters["W" + str(l+1)] -=learning_rate*v["dW" + str(l+1)]
-        parameters["b" + str(l+1)] -=learning_rate*v["db" + str(l+1)]
-        ### END CODE HERE ###
-        
-    return parameters, v
-#%%
 def initialize_adam(parameters) :
     """
     Initializes v and s as two python dictionaries with:
@@ -602,28 +418,29 @@ def initialize_adam(parameters) :
     
     # Initialize v, s. Input: "parameters". Outputs: "v, s".
     for l in range(L):
-    ### START CODE HERE ### (approx. 4 lines)
+
         v["dW" + str(l+1)] = np.zeros((parameters["W" + str(l+1)].shape))
         v["db" + str(l+1)] = np.zeros((parameters["b" + str(l+1)].shape))
         s["dW" + str(l+1)] = np.zeros((parameters["W" + str(l+1)].shape))
         s["db" + str(l+1)] = np.zeros((parameters["b" + str(l+1)].shape))
-    ### END CODE HERE ###
     
-    return v, s
+    return v, s  
 #%%
-def update_parameters_with_adam(parameters, grads, v, s, t, learning_rate = 0.01,
-                                beta1 = 0.9, beta2 = 0.999,  epsilon = 1e-8):
+def update_parameters(optimizer, parameters, grads, learning_rate = 0.01, v, beta, t,
+                      beta1 = 0.9, beta2 = 0.999,  epsilon = 1e-8):
     """
-    Update parameters using Adam
+    Update parameters using gradient descent
     
     Arguments:
-    parameters -- python dictionary containing your parameters:
-                    parameters['W' + str(l)] = Wl
-                    parameters['b' + str(l)] = bl
-    grads -- python dictionary containing your gradients for each parameters:
-                    grads['dW' + str(l)] = dWl
-                    grads['db' + str(l)] = dbl
-    v -- Adam variable, moving average of the first gradient, python dictionary
+    parameters -- python dictionary containing your parameters 
+    grads -- python dictionary containing your gradients, output of L_model_backward
+        
+    v -- python dictionary containing the current velocity (first gradient):
+                    v['dW' + str(l)] = ...
+                    v['db' + str(l)] = ...
+    beta -- the momentum hyperparameter, scalar
+    learning_rate -- the learning rate, scalar
+    
     s -- Adam variable, moving average of the squared gradient, python dictionary
     learning_rate -- the learning rate, scalar.
     beta1 -- Exponential decay hyperparameter for the first moment estimates 
@@ -632,47 +449,103 @@ def update_parameters_with_adam(parameters, grads, v, s, t, learning_rate = 0.01
 
     Returns:
     parameters -- python dictionary containing your updated parameters 
-    v -- Adam variable, moving average of the first gradient, python dictionary
+                  parameters["W" + str(l)] = ... 
+                  parameters["b" + str(l)] = ...
+    v -- python dictionary containing your updated velocities(moving average of the first gradient)
+    
     s -- Adam variable, moving average of the squared gradient, python dictionary
     """
     
-    L = len(parameters) // 2                 # number of layers in the neural networks
-    v_corrected = {}                         # Initializing first moment estimate, python dictionary
-    s_corrected = {}                         # Initializing second moment estimate, python dictionary
+    L = len(parameters) // 2 # number of layers in the neural network
+
+    # Update rule for each parameter. 
+    if optimizer =='gd':
+        for l in range(L):
+            parameters["W" + str(l+1)] = parameters["W" + str(l+1)] - learning_rate*grads["dW" + str(l+1)]
+            parameters["b" + str(l+1)] = parameters["b" + str(l+1)] - learning_rate*grads["db" + str(l+1)]
+        return parameters
     
-    # Perform Adam update on all parameters
-    for l in range(L):
-        # Moving average of the gradients. Inputs: "v, grads, beta1". Output: "v".
-        ### START CODE HERE ### (approx. 2 lines)
-        v["dW" + str(l+1)] = beta1*v["dW" + str(l+1)] +(1-beta1)*grads["dW" + str(l+1)]
-        v["db" + str(l+1)] = beta1*v["db" + str(l+1)] +(1-beta1)*grads["db" + str(l+1)]
-        ### END CODE HERE ###
+    elif optimizer =='momentum':
+        for l in range(L):
+            # compute velocities
+            v["dW" + str(l+1)] = beta*v["dW" + str(l+1)] +(1-beta)*grads["dW" + str(l+1)]
+            v["db" + str(l+1)] = beta*v["db" + str(l+1)] +(1-beta)*grads["db" + str(l+1)]
+            
+            # update parameters
+            parameters["W" + str(l+1)] -=learning_rate*v["dW" + str(l+1)]
+            parameters["b" + str(l+1)] -=learning_rate*v["db" + str(l+1)]
+        
+        return parameters, v
+            
+    elif optimizer =='Adam': 
+        v_corrected = {}        # Initializing first moment estimate, python dictionary
+        s_corrected = {}        # Initializing second moment estimate, python dictionary
+        
+        for l in range(L):
+            # Moving average of the gradients. Inputs: "v, grads, beta1". Output: "v".
+            v["dW" + str(l+1)] = beta1*v["dW" + str(l+1)] +(1-beta1)*grads["dW" + str(l+1)]
+            v["db" + str(l+1)] = beta1*v["db" + str(l+1)] +(1-beta1)*grads["db" + str(l+1)]
+            
+            # Compute bias-corrected first moment estimate. Inputs: "v, beta1, t". Output: "v_corrected".
+            v_corrected["dW" + str(l+1)] = v["dW" + str(l+1)]/(1-beta1**t)
+            v_corrected["db" + str(l+1)] = v["db" + str(l+1)]/(1-beta1**t)
+            
+            # Moving average of the squared gradients. Inputs: "s, grads, beta2". Output: "s".
+            s["dW" + str(l+1)] = beta2*s["dW" + str(l+1)] +(1-beta2)*(grads["dW" + str(l+1)])**2
+            s["db" + str(l+1)] = beta2*s["db" + str(l+1)] +(1-beta2)*(grads["db" + str(l+1)])**2
+            
+            # Compute bias-corrected second raw moment estimate. Inputs: "s, beta2, t". Output: "s_corrected".
+            s_corrected["dW" + str(l+1)] =  s["dW" + str(l+1)]/(1-beta2**t)
+            s_corrected["db" + str(l+1)] =  s["db" + str(l+1)]/(1-beta2**t)
+            
+            # Update parameters. Inputs: "parameters, learning_rate, v_corrected, s_corrected, epsilon". Output: "parameters".
+            parameters["W" + str(l+1)] -= learning_rate*v_corrected["dW" + str(l+1)]/(np.sqrt(s_corrected["dW" + str(l+1)])+epsilon)
+            parameters["b" + str(l+1)] -= learning_rate*v_corrected["db" + str(l+1)]/(np.sqrt(s_corrected["db" + str(l+1)])+epsilon)
+        
+        return parameters, v, s
+#%%
+def random_mini_batches(X, Y, mini_batch_size = 64, seed = 0):
+    """
+    Creates a list of random minibatches from (X, Y)
+    
+    Arguments:
+    X -- input data, of shape (input size, number of examples)
+    Y -- true "label" vector (1 for blue dot / 0 for red dot), of shape (1, number of examples)
+    mini_batch_size -- size of the mini-batches, integer
+    
+    Returns:
+    mini_batches -- list of synchronous (mini_batch_X, mini_batch_Y)
+    """
+    
+    np.random.seed(seed)        # To make your "random" minibatches the same as ours
+    m = X.shape[1]              # number of training examples
+    mini_batches = []
+        
+    # Step 1: Shuffle (X, Y)
+    permutation = list(np.random.permutation(m))
+    shuffled_X = X[:, permutation]
+    shuffled_Y = Y[:, permutation].reshape((1,m))
 
-        # Compute bias-corrected first moment estimate. Inputs: "v, beta1, t". Output: "v_corrected".
+    # Step 2: Partition (shuffled_X, shuffled_Y). Minus the end case.
+    num_complete_minibatches = math.floor(m/mini_batch_size) # number of mini batches of size mini_batch_size in your partitionning
+    for k in range(0, num_complete_minibatches):
         ### START CODE HERE ### (approx. 2 lines)
-        v_corrected["dW" + str(l+1)] = v["dW" + str(l+1)]/(1-beta1**t)
-        v_corrected["db" + str(l+1)] = v["db" + str(l+1)]/(1-beta1**t)
+        mini_batch_X = shuffled_X[:,k*mini_batch_size:(k+1)*mini_batch_size]
+        mini_batch_Y = shuffled_Y[:,k*mini_batch_size:(k+1)*mini_batch_size]
         ### END CODE HERE ###
-
-        # Moving average of the squared gradients. Inputs: "s, grads, beta2". Output: "s".
+        mini_batch = (mini_batch_X, mini_batch_Y)
+        mini_batches.append(mini_batch)
+    
+    # Handling the end case (last mini-batch < mini_batch_size)
+    if m % mini_batch_size != 0:
         ### START CODE HERE ### (approx. 2 lines)
-        s["dW" + str(l+1)] = beta2*s["dW" + str(l+1)] +(1-beta2)*(grads["dW" + str(l+1)])**2
-        s["db" + str(l+1)] = beta2*s["db" + str(l+1)] +(1-beta2)*(grads["db" + str(l+1)])**2
+        mini_batch_X = shuffled_X[:,mini_batch_size*num_complete_minibatches:m]
+        mini_batch_Y = shuffled_Y[:,mini_batch_size*num_complete_minibatches:m]
         ### END CODE HERE ###
-
-        # Compute bias-corrected second raw moment estimate. Inputs: "s, beta2, t". Output: "s_corrected".
-        ### START CODE HERE ### (approx. 2 lines)
-        s_corrected["dW" + str(l+1)] =  s["dW" + str(l+1)]/(1-beta2**t)
-        s_corrected["db" + str(l+1)] =  s["db" + str(l+1)]/(1-beta2**t)
-        ### END CODE HERE ###
-
-        # Update parameters. Inputs: "parameters, learning_rate, v_corrected, s_corrected, epsilon". Output: "parameters".
-        ### START CODE HERE ### (approx. 2 lines)
-        parameters["W" + str(l+1)] -= learning_rate*v_corrected["dW" + str(l+1)]/(np.sqrt(s_corrected["dW" + str(l+1)])+epsilon)
-        parameters["b" + str(l+1)] -= learning_rate*v_corrected["db" + str(l+1)]/(np.sqrt(s_corrected["db" + str(l+1)])+epsilon)
-        ### END CODE HERE ###
-
-    return parameters, v, s
+        mini_batch = (mini_batch_X, mini_batch_Y)
+        mini_batches.append(mini_batch)
+    
+    return mini_batches
 #%%
 def predict(parameters, X):
     """
