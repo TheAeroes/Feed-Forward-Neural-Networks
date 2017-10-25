@@ -4,6 +4,7 @@ Created on Thu Oct 12 08:54:16 2017
 
 @author: Eyas
 """
+import numpy as np
 #%%
 def initialize_parameters(layer_dims, init_type = 'random' , scale_f = 0.01, seed = 0):
     """
@@ -21,7 +22,7 @@ def initialize_parameters(layer_dims, init_type = 'random' , scale_f = 0.01, see
     
     if init_type  == 'random':
         sF = lambda x: scale_f
-    elif init_type == 'He': # He et al. 2015 initialization  (good for ReLu)
+    elif init_type == 'He': # He et al. 2015 initialization  (good for ReLU)
         sF = lambda x: np.sqrt(2/x)
     elif init_type == 'Xavier': # Xavier initialization
         sF = lambda x: np.sqrt(1/x)
@@ -132,7 +133,7 @@ def linear_activation_forward(A_prev, W, b, activation, keep_prob =1):
     elif activation == "ReLU":
         A, activation_cache = ReLU(Z)
     
-    elif activation == "softmax"
+    elif activation == "softmax":
         A, activation_cache = softmax(Z)
  
     assert (A.shape == (W.shape[0], A_prev.shape[1]))
@@ -308,7 +309,7 @@ def linear_activation_backward(dA, cache, activation ):
     
     return dA_prev, dW, db
 #%%
-def backward_propagation(AL, Y, caches, cost_type = "multinoulli" ,activation_list, lambd= 0, keep_prob = 1, Y_start = 0):
+def backward_propagation(AL, Y, caches, cost_type ,activation_list, lambd= 0, keep_prob = 1, Y_start = 0):
     """
     Implement the backward propagation for the [LINEAR->RELU] * (L-1) -> LINEAR -> SIGMOID group
     
@@ -335,7 +336,7 @@ def backward_propagation(AL, Y, caches, cost_type = "multinoulli" ,activation_li
         Y = Y.reshape(AL.shape) # after this line, Y is the same shape as AL
         dAL = - (np.divide(Y, AL) - np.divide(1 - Y, 1 - AL))
     elif cost_type == "multinoulli":
-        I = np.zeros(K,m); I(Y-Y_start,range(m)) = 1
+        I = np.zeros(K,m); I[Y-Y_start,range(m)] = 1
         dAL = I
     
     current_cache = caches[L-1]
@@ -406,7 +407,7 @@ def initialize_optimizer(parameters,optimizer):
             
     return v, s
 #%%
-def update_parameters(optimizer, parameters, grads, learning_rate = 0.01, v, beta, s, t,
+def update_parameters(optimizer, parameters, grads, learning_rate, v, beta, s, t,
                       beta1 = 0.9, beta2 = 0.999,  epsilon = 1e-8):
     """
     Update parameters using gradient descent
@@ -644,7 +645,7 @@ def vector_to_dictionary(theta,parameters):
     param = {}
     count = 0
     for key in parameters.keys():
-        param[key] = theta[count:count+np.prod(parameters[key].shape)-1].reshape(parameters[key].shape)
+        param[key] = theta[count:count+np.prod(parameters[key].shape)].reshape(parameters[key].shape)
         count += np.prod(parameters[key].shape)
         
     return param
@@ -653,9 +654,18 @@ def gradients_to_vector(gradients):
     """
     Roll all our gradients dictionary into a single vector satisfying our specific required shape.
     """
-    
     count = 0
-    for key in gradients.keys()
+    #LS = set(list(gradients.keys()))-set(list(gradients.keys())[0::3])
+    Lg = len(gradients)
+    xx = np.array(range(Lg)); yy =np.zeros(Lg,bool);
+    yy[::3]=True; yy=~yy;
+    v  = np.zeros(len(xx[yy]),int); u = np.zeros(len(xx[yy]),int);
+    v[1::2] = 1; u[::2] =1;
+    idx = v-xx[yy]-u;
+    
+    LS  = [list(gradients.keys())[i] for i in idx]
+    
+    for key in LS:
         # flatten parameter
         new_vector = np.reshape(gradients[key], (-1,1))
         
@@ -667,7 +677,7 @@ def gradients_to_vector(gradients):
 
     return theta
 #%%
-def gradient_check(parameters, activation_list,cost_type = "multinoulli", gradients, X, Y,Y_start = 0,lambd = 0, epsilon = 1e-7):
+def gradient_check(parameters, activation_list,cost_type, gradients, X, Y,Y_start = 0,lambd = 0, epsilon = 1e-7):
     """
     Checks if backward_propagation_n computes correctly the gradient of the cost output by forward_propagation_n
     
@@ -693,17 +703,16 @@ def gradient_check(parameters, activation_list,cost_type = "multinoulli", gradie
     for i in range(num_parameters):
         
         # Compute J_plus[i]. Inputs: "parameters_values, epsilon". Output = "J_plus[i]".
-    
         thetaplus = np.copy(parameters_values)                                                           # Step 1
         thetaplus[i][0] += epsilon                                                                       # Step 2
-        AL = forward_propagation(X, vector_to_dictionary(thetaplus), activation_list)
-        J_plus[i] =  compute_cost(AL, Y, cost_type, vector_to_dictionary(thetaplus), lambd, Y_start)     # Step 3
+        AL, _ = forward_propagation(X,vector_to_dictionary(thetaplus, parameters), activation_list)
+        J_plus[i] =  compute_cost(AL, Y, cost_type, vector_to_dictionary(thetaplus, parameters), lambd, Y_start)     # Step 3
         
         # Compute J_minus[i]. Inputs: "parameters_values, epsilon". Output = "J_minus[i]".
         thetaminus = np.copy(parameters_values)                                                          # Step 1
         thetaminus[i][0] -=  epsilon                                                                     # Step 2  
-        AL = forward_propagation(X, vector_to_dictionary(thetaminus), activation_list)
-        J_minus[i] =  compute_cost(AL, Y, cost_type, vector_to_dictionary(thetaminus), lambd, Y_start)   # Step 3
+        AL, _ = forward_propagation(X, vector_to_dictionary(thetaminus, parameters), activation_list)
+        J_minus[i] =  compute_cost(AL, Y, cost_type, vector_to_dictionary(thetaminus, parameters), lambd, Y_start)   # Step 3
         
         # Compute gradapprox[i]
         gradapprox[i] =(J_plus[i]-J_minus[i])/(2*epsilon)
