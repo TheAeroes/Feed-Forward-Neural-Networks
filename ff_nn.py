@@ -248,15 +248,29 @@ def linear_backward(dZ, cache):
     
     return dA_prev, dW, db
 #%%
-def relu_backward(dA, activation_cache):
+def relu_backward(dA, cache):
     
-    dZ = dA*(activation_cache>0)
+    #dZ = dA*(activation_cache>0)
+    
+    
+    Z = cache
+    dZ = np.array(dA, copy=True) # just converting dz to a correct object.
+    
+    # When z <= 0, you should set dz to 0 as well. 
+    dZ[Z <= 0] = 0
+    
+    assert (dZ.shape == Z.shape)
     
     return dZ
 #%%
-def sigmoid_backward(dA, activation_cache):
+def sigmoid_backward(dA, cache):
     
-    dZ = dA*activation_cache*(1- activation_cache)
+    #dZ = dA*activation_cache*(1- activation_cache)
+    Z = cache
+    s = 1/(1+np.exp(-Z))
+    dZ = dA * s * (1-s)
+    
+    assert (dZ.shape == Z.shape)
     
     return dZ
 
