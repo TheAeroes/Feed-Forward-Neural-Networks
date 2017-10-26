@@ -5,6 +5,10 @@ Created on Thu Oct 12 08:54:16 2017
 @author: Eyas
 """
 import numpy as np
+from testCases import *
+from gc_utils import sigmoid_n, relu_n, dictionary_to_vector_n, vector_to_dictionary_n, gradients_to_vector_n
+import matplotlib.pyplot as plt
+import math
 #%%
 def initialize_parameters(layer_dims, init_type = 'random' , scale_f = 0.01, seed = 0):
     """
@@ -29,7 +33,7 @@ def initialize_parameters(layer_dims, init_type = 'random' , scale_f = 0.01, see
         
     for l in range(1, L):
         
-        parameters['W' + str(l)] = np.random.randn(layer_dims[l], layer_dims[l-1]) * sF(layers_dims[l-1])
+        parameters['W' + str(l)] = np.random.randn(layer_dims[l], layer_dims[l-1]) * sF(layer_dims[l-1])
         parameters['b' + str(l)] = np.zeros((layer_dims[l], 1))
 
     
@@ -87,7 +91,7 @@ def softmax(z):
     """
     log_s = z  - log_sum_exp(z)
     s  = np.exp(log_s)
-    #s = np.exp(z)/sum(np.exp(z));
+    #s = np.exp(z)/np.sum(np.exp(z),0);
     cache = z
     
     return s , cache
@@ -180,7 +184,7 @@ def forward_propagation(X, parameters, activation_list , keep_prob = 1):
     caches.append(cache)
     
     
-    assert(AL.shape == (1,X.shape[1]))
+  #  assert(AL.shape == (1,X.shape[1]))
             
     return AL, caches
 #%%
@@ -210,9 +214,9 @@ def compute_cost(AL, Y, cost_type, parameters = [], lambd = 0 , onehot = False, 
     if cost_type == "bernoulli":
         cost = -float(np.sum(Y*np.log(AL)+(1-Y)*np.log(1-AL))/m)
         #cost = -np.sum(Y*np.log(AL)+(1-Y)*np.log(1-AL))/m
-    elif cost_type =="multinoulli" and onehot==False:
-        #cost = -np.sum(np.log(AL).ravel()[(Y-Y_start)*K+range(m)])/m
+    elif cost_type =='multinoulli':
         cost = -np.sum(np.log(AL[(Y-Y_start),range(m)]))/m
+        
     cost = np.squeeze(cost)      # To make sure your cost's shape is what we expect (e.g. this turns [[17]] into 17).
 
     cost += L2_regularization_cost
@@ -251,8 +255,6 @@ def linear_backward(dZ, cache):
 def relu_backward(dA, cache):
     
     #dZ = dA*(activation_cache>0)
-    
-    
     Z = cache
     dZ = np.array(dA, copy=True) # just converting dz to a correct object.
     
@@ -275,9 +277,10 @@ def sigmoid_backward(dA, cache):
     return dZ
 
 #%%
-def softmax_backward(dAL,activation_cache):    
-
-    dZ = activation_cache - dAL
+def softmax_backward(dAL,cache): 
+    Z = cache 
+    SF,_ = softmax(Z)
+    dZ = SF - dAL
     
     return dZ
 
@@ -350,7 +353,8 @@ def backward_propagation(AL, Y, caches, cost_type ,activation_list, lambd= 0, ke
         Y = Y.reshape(AL.shape) # after this line, Y is the same shape as AL
         dAL = - (np.divide(Y, AL) - np.divide(1 - Y, 1 - AL))
     elif cost_type == "multinoulli":
-        I = np.zeros(K,m); I[Y-Y_start,range(m)] = 1
+        #dAL = AL
+        I = np.zeros((K,m)); I[Y-Y_start,range(m)] = 1
         dAL = I
     
     current_cache = caches[L-1]
@@ -366,7 +370,7 @@ def backward_propagation(AL, Y, caches, cost_type ,activation_list, lambd= 0, ke
         
         
         current_cache = caches[l]
-        dA_prev_temp, dW_temp, db_temp = linear_activation_backward(grads["dA" + str(l + 2)], current_cache, activation_list[l + 1])
+        dA_prev_temp, dW_temp, db_temp = linear_activation_backward(grads["dA" + str(l + 2)], current_cache, activation_list[l])
         
         grads["dA" + str(l + 1)] = dA_prev_temp 
         
@@ -552,13 +556,13 @@ def predict(parameters, X, activation_list):
     """
     # Computes probabilities using forward propagation, and classifies based on max predicted probability.
     AL, cache = forward_propagation(X, parameters, activation_list)
-    predictions = np.argmax(AL,0)
+    predictions = np.argmax(AL,axis = 0)
     
     return predictions
 #%%
-def model(X, Y, layers_dims, activation_list , optimizer, learning_rate = 0.0007, mini_batch_size = 64, beta = 0.9,
+def model(X, Y, layer_dims, activation_list, cost_type , optimizer, learning_rate = 0.0007, mini_batch_size = 64, beta = 0.9,
           beta1 = 0.9, beta2 = 0.999,  epsilon = 1e-8, num_epochs = 10000, print_cost = True,
-          lambd = 0, keep_prob = 1):
+          lambd = 0, keep_prob = 1,Y_start = 0):
     """
     L-layer feed forward neural network model which can be run in different optimizer modes.
     
@@ -579,13 +583,13 @@ def model(X, Y, layers_dims, activation_list , optimizer, learning_rate = 0.0007
     parameters -- python dictionary containing your updated parameters 
     """
 
-    L = len(layers_dims)             # number of layers in the neural networks
+    L = len(layer_dims)             # number of layers in the neural networks
     costs = []                       # to keep track of the cost
     t = 0                            # initializing the counter required for Adam update
     seed = 10
     
     # Initialize parameters
-    parameters = initialize_parameters(layers_dims,init_type = 'He', scale_f =0.01, seed=0)
+    parameters = initialize_parameters(layer_dims,init_type = 'He', scale_f =0.01, seed=0)
 
     # Initialize the optimizer
     v, s = initialize_optimizer(parameters, optimizer)
@@ -609,7 +613,7 @@ def model(X, Y, layers_dims, activation_list , optimizer, learning_rate = 0.0007
             cost = compute_cost(AL, minibatch_Y, cost_type, parameters, lambd) 
 
             # Backward propagation 
-            grads = backward_propagation(minibatch_X, minibatch_Y, caches)
+            grads = backward_propagation(AL, minibatch_Y, caches, cost_type ,activation_list, lambd, keep_prob , Y_start )
 
             # Update parameters
             t = t + 1 # Adam counter
@@ -719,18 +723,20 @@ def gradient_check(parameters, activation_list,cost_type, gradients, X, Y,Y_star
         # Compute J_plus[i]. Inputs: "parameters_values, epsilon". Output = "J_plus[i]".
         thetaplus = np.copy(parameters_values)                                                           # Step 1
         thetaplus[i][0] += epsilon                                                                       # Step 2
-        AL, _ = forward_propagation(X,vector_to_dictionary(thetaplus, parameters), activation_list)
-        J_plus[i] =  compute_cost(AL, Y, cost_type, vector_to_dictionary(thetaplus, parameters), lambd, Y_start)     # Step 3
+        AL, _ = forward_propagation(X,vector_to_dictionary(thetaplus,parameters), activation_list)
+        J_plus[i] =  compute_cost(AL, Y, cost_type, vector_to_dictionary(thetaplus,parameters), lambd, Y_start)     # Step 3
         
         # Compute J_minus[i]. Inputs: "parameters_values, epsilon". Output = "J_minus[i]".
         thetaminus = np.copy(parameters_values)                                                          # Step 1
         thetaminus[i][0] -=  epsilon                                                                     # Step 2  
-        AL, _ = forward_propagation(X, vector_to_dictionary(thetaminus, parameters), activation_list)
-        J_minus[i] =  compute_cost(AL, Y, cost_type, vector_to_dictionary(thetaminus, parameters), lambd, Y_start)   # Step 3
+        AL, _ = forward_propagation(X, vector_to_dictionary(thetaminus,parameters), activation_list)
+        J_minus[i] =  compute_cost(AL, Y, cost_type, vector_to_dictionary(thetaminus,parameters), lambd, Y_start)   # Step 3
         
         # Compute gradapprox[i]
         gradapprox[i] =(J_plus[i]-J_minus[i])/(2*epsilon)
-        
+  #  plt.figure()
+  #  plt.plot(gradapprox)
+  #  plt.plot(grad)
     # Compare gradapprox to backward propagation gradients by computing difference.
     numerator = np.linalg.norm(grad-gradapprox,ord=2)                              # Step 1'
     denominator = np.linalg.norm(grad,ord=2)+np.linalg.norm(gradapprox,ord=2)      # Step 2'
@@ -742,3 +748,144 @@ def gradient_check(parameters, activation_list,cost_type, gradients, X, Y,Y_star
         print ("\033[92m" + "Your backward propagation works perfectly fine! difference = " + str(difference) + "\033[0m")
     
     return difference
+#%%
+def forward_propagation_n(X, Y, parameters):
+    """
+    Implements the forward propagation (and computes the cost) presented in Figure 3.
+    
+    Arguments:
+    X -- training set for m examples
+    Y -- labels for m examples 
+    parameters -- python dictionary containing your parameters "W1", "b1", "W2", "b2", "W3", "b3":
+                    W1 -- weight matrix of shape (5, 4)
+                    b1 -- bias vector of shape (5, 1)
+                    W2 -- weight matrix of shape (3, 5)
+                    b2 -- bias vector of shape (3, 1)
+                    W3 -- weight matrix of shape (1, 3)
+                    b3 -- bias vector of shape (1, 1)
+    
+    Returns:
+    cost -- the cost function (logistic cost for one example)
+    """
+    
+    # retrieve parameters
+    m = X.shape[1]
+    W1 = parameters["W1"]
+    b1 = parameters["b1"]
+    W2 = parameters["W2"]
+    b2 = parameters["b2"]
+    W3 = parameters["W3"]
+    b3 = parameters["b3"]
+
+    # LINEAR -> RELU -> LINEAR -> RELU -> LINEAR -> SIGMOID
+    Z1 = np.dot(W1, X) + b1
+    A1 = relu_n(Z1)
+    Z2 = np.dot(W2, A1) + b2
+    A2 = relu_n(Z2)
+    Z3 = np.dot(W3, A2) + b3
+    A3 = sigmoid_n(Z3)
+
+    # Cost
+    logprobs = np.multiply(-np.log(A3),Y) + np.multiply(-np.log(1 - A3), 1 - Y)
+    cost = 1./m * np.sum(logprobs)
+    
+    cache = (Z1, A1, W1, b1, Z2, A2, W2, b2, Z3, A3, W3, b3)
+    
+    return cost, cache
+#%%
+def backward_propagation_n(X, Y, cache):
+    """
+    Implement the backward propagation presented in figure 2.
+    
+    Arguments:
+    X -- input datapoint, of shape (input size, 1)
+    Y -- true "label"
+    cache -- cache output from forward_propagation_n()
+    
+    Returns:
+    gradients -- A dictionary with the gradients of the cost with respect to each parameter, activation and pre-activation variables.
+    """
+    
+    m = X.shape[1]
+    (Z1, A1, W1, b1, Z2, A2, W2, b2, Z3, A3, W3, b3) = cache
+    
+    dZ3 = A3 - Y
+    dW3 = 1./m * np.dot(dZ3, A2.T)
+    db3 = 1./m * np.sum(dZ3, axis=1, keepdims = True)
+    
+    dA2 = np.dot(W3.T, dZ3)
+    dZ2 = np.multiply(dA2, np.int64(A2 > 0))
+    dW2 = 1./m * np.dot(dZ2, A1.T)
+    db2 = 1./m * np.sum(dZ2, axis=1, keepdims = True)
+    
+    dA1 = np.dot(W2.T, dZ2)
+    dZ1 = np.multiply(dA1, np.int64(A1 > 0))
+    dW1 = 1./m * np.dot(dZ1, X.T)
+    db1 = 1./m * np.sum(dZ1, axis=1, keepdims = True)
+    
+    gradients = {"dZ3": dZ3, "dW3": dW3, "db3": db3,
+                 "dA2": dA2, "dZ2": dZ2, "dW2": dW2, "db2": db2,
+                 "dA1": dA1, "dZ1": dZ1, "dW1": dW1, "db1": db1}
+    
+    return gradients
+#%%
+def gradient_check_n(parameters, gradients, X, Y, epsilon = 1e-10):
+    """
+    Checks if backward_propagation_n computes correctly the gradient of the cost output by forward_propagation_n
+    
+    Arguments:
+    parameters -- python dictionary containing your parameters "W1", "b1", "W2", "b2", "W3", "b3":
+    grad -- output of backward_propagation_n, contains gradients of the cost with respect to the parameters. 
+    x -- input datapoint, of shape (input size, 1)
+    y -- true "label"
+    epsilon -- tiny shift to the input to compute approximated gradient with formula(1)
+    
+    Returns:
+    difference -- difference (2) between the approximated gradient and the backward propagation gradient
+    """
+    
+    # Set-up variables
+    parameters_values, _ = dictionary_to_vector(parameters)
+    grad = gradients_to_vector_n(gradients)
+    num_parameters = parameters_values.shape[0]
+    J_plus = np.zeros((num_parameters, 1))
+    J_minus = np.zeros((num_parameters, 1))
+    gradapprox = np.zeros((num_parameters, 1))
+    
+    # Compute gradapprox
+    for i in range(num_parameters):
+        
+        # Compute J_plus[i]. Inputs: "parameters_values, epsilon". Output = "J_plus[i]".
+        # "_" is used because the function you have to outputs two parameters but we only care about the first one
+        ### START CODE HERE ### (approx. 3 lines)
+        thetaplus = np.copy(parameters_values)                 # Step 1
+        thetaplus[i][0] += epsilon                                # Step 2
+        J_plus[i], _ =  forward_propagation_n(X, Y,  vector_to_dictionary(thetaplus,parameters))                                   # Step 3
+        ### END CODE HERE ###
+        
+        # Compute J_minus[i]. Inputs: "parameters_values, epsilon". Output = "J_minus[i]".
+        ### START CODE HERE ### (approx. 3 lines)
+        thetaminus = np.copy(parameters_values)                                     # Step 1
+        thetaminus[i][0] -=  epsilon                              # Step 2        
+        J_minus[i], _ =  forward_propagation_n(X, Y,  vector_to_dictionary(thetaminus,parameters))                                 # Step 3
+        ### END CODE HERE ###
+        
+        # Compute gradapprox[i]
+        ### START CODE HERE ### (approx. 1 line)
+        gradapprox[i] =(J_plus[i]-J_minus[i])/(2*epsilon)
+        ### END CODE HERE ###
+    
+    # Compare gradapprox to backward propagation gradients by computing difference.
+    ### START CODE HERE ### (approx. 1 line)
+    numerator = np.linalg.norm(grad-gradapprox,ord=2)                                           # Step 1'
+    denominator = np.linalg.norm(grad,ord=2)+np.linalg.norm(gradapprox,ord=2)                                          # Step 2'
+    difference = numerator/denominator                                         # Step 3'
+    ### END CODE HERE ###
+
+    if difference > 1e-7:
+        print ("\033[93m" + "There is a mistake in the backward propagation! difference = " + str(difference) + "\033[0m")
+    else:
+        print ("\033[92m" + "Your backward propagation works perfectly fine! difference = " + str(difference) + "\033[0m")
+    
+    return difference
+#%%
