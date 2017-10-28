@@ -147,9 +147,10 @@ def linear_activation_forward(A_prev, W, b, activation, keep_prob =1):
         D = (D<keep_prob)                          # Step 2: convert entries of D to 0 or 1 (using keep_prob as the threshold)
         A = A*D                                    # Step 3: shut down some neurons of A
         A = A/keep_prob                            # Step 4: scale the value of neurons that haven't been shut down
-        activation_cache.append(D)
+        cache = (linear_cache, activation_cache,D)
+    else: 
+        cache = (linear_cache, activation_cache)
         
-    cache = (linear_cache, activation_cache)
 
     return A, cache
 #%%
@@ -356,20 +357,27 @@ def backward_propagation(AL, Y, caches, cost_type ,activation_list, lambd= 0, ke
         #dAL = AL
         I = np.zeros((K,m)); I[Y-Y_start,range(m)] = 1
         dAL = I
+        
+ # if keep_prob < 1:
+ #       current_caches = caches[L-1][:1]
+ #   else:      
+        current_cache = caches[L-1]
     
-    current_cache = caches[L-1]
+    
     grads["dA" + str(L)], grads["dW" + str(L)], grads["db" + str(L)] = linear_activation_backward(dAL, current_cache, activation_list[L-1])
     
     for l in reversed(range(L-1)):
         # lth layer: (RELU -> LINEAR) gradients.
         # Inputs: "grads["dA" + str(l + 2)], caches". Outputs: "grads["dA" + str(l + 1)] , grads["dW" + str(l + 1)] , grads["db" + str(l + 1)] 
-    
+
         if keep_prob < 1:
-            grads["dA" + str(l + 2)] *= current_cache[1][-1] # Step 1: Apply mask D  to shut down the same neurons as during the forward propagation
-            grads["dA" + str(l + 2)] /= keep_prob            # Step 2: Scale the value of neurons that haven't been shut down
+            current_cache = caches[l][:2]
+            grads["dA" + str(l + 2)] *= caches[l][2]   # Step 1: Apply mask D  to shut down the same neurons as during the forward propagation
+            grads["dA" + str(l + 2)] /= keep_prob           # Step 2: Scale the value of neurons that haven't been shut down
+        else:
+            current_cache = caches[l]
         
         
-        current_cache = caches[l]
         dA_prev_temp, dW_temp, db_temp = linear_activation_backward(grads["dA" + str(l + 2)], current_cache, activation_list[l])
         
         grads["dA" + str(l + 1)] = dA_prev_temp 
@@ -390,8 +398,6 @@ def initialize_optimizer(parameters,optimizer):
                 - values: numpy arrays of zeros of the same shape as the corresponding gradients/parameters.
     Arguments:
     parameters -- python dictionary containing your parameters.
-                    parameters['W' + str(l)] = Wl
-                    parameters['b' + str(l)] = bl
     
     Returns:
     v -- python dictionary containing the current velocity.
@@ -722,7 +728,7 @@ def gradient_check(parameters, activation_list,cost_type, gradients, X, Y,Y_star
     Checks if backward_propagation_n computes correctly the gradient of the cost output by forward_propagation_n
     
     Arguments:
-    parameters -- python dictionary containing your parameters "W1", "b1", "W2", "b2", "W3", "b3":
+    parameters -- python dictionary containing your parameters
     grad -- output of backward_propagation_n, contains gradients of the cost with respect to the parameters. 
     x -- input datapoint, of shape (input size, 1)
     y -- true "label"
