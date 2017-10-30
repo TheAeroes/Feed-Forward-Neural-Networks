@@ -5,8 +5,6 @@ Created on Thu Oct 12 08:54:16 2017
 @author: Eyas
 """
 import numpy as np
-from testCases import *
-from gc_utils import sigmoid_n, relu_n, dictionary_to_vector_n, vector_to_dictionary_n, gradients_to_vector_n
 import matplotlib.pyplot as plt
 import math
 #%%
@@ -89,12 +87,21 @@ def softmax(z):
     Return:
     s -- softmax(z)
     """
-    log_s = z  - log_sum_exp(z)
-    s  = np.exp(log_s)
-    #s = np.exp(z)/np.sum(np.exp(z),0);
+   # log_s = z  - log_sum_exp(z)
+   # s  = np.exp(log_s)
+    max_z = np.max(z,0)
+    s = np.exp(z-max_z)/np.sum(np.exp(z-max_z),0);
     cache = z
     
     return s , cache
+#%%
+def log_sum_exp(Z):
+    
+    max_z = np.max(Z,0)
+    
+    log_s_e = np.log(np.sum(np.exp(Z -max_z),0)) + max_z
+    
+    return log_s_e
 
 #%%
 def ReLU(z):
@@ -212,10 +219,10 @@ def compute_cost(AL, Y, cost_type, parameters = [], lambd = 0 , onehot = False, 
 
     
     # Compute loss from aL and y.
-    if cost_type == "bernoulli":
+    if cost_type == "sigmoid":
         cost = -float(np.sum(Y*np.log(AL)+(1-Y)*np.log(1-AL))/m)
         #cost = -np.sum(Y*np.log(AL)+(1-Y)*np.log(1-AL))/m
-    elif cost_type =='multinoulli':
+    elif cost_type =='softmax':
         cost = -np.sum(np.log(AL[(Y-Y_start),range(m)]))/m
         
     cost = np.squeeze(cost)      # To make sure your cost's shape is what we expect (e.g. this turns [[17]] into 17).
@@ -284,15 +291,6 @@ def softmax_backward(dAL,cache):
     dZ = SF - dAL
     
     return dZ
-
-#%%
-def log_sum_exp(Z):
-    
-    max_z = np.max(Z,0)
-    
-    log_s_e = np.log(np.sum(np.exp(Z -max_z),0)) + max_z
-    
-    return log_s_e
 #%%
 def linear_activation_backward(dA, cache, activation ):
     """
@@ -327,7 +325,7 @@ def linear_activation_backward(dA, cache, activation ):
     
     return dA_prev, dW, db
 #%%
-def backward_propagation(AL, Y, caches, cost_type ,activation_list, lambd= 0, keep_prob = 1, Y_start = 0):
+def backward_propagation(AL, Y, caches,activation_list, lambd= 0, keep_prob = 1, Y_start = 0):
     """
     Implement the backward propagation for the [LINEAR->RELU] * (L-1) -> LINEAR -> SIGMOID group
     
@@ -350,20 +348,16 @@ def backward_propagation(AL, Y, caches, cost_type ,activation_list, lambd= 0, ke
     
     # Initializing the backpropagation
     
-    if cost_type == "bernoulli":
+    if activation_list[-1]== "sigmoid":
         Y = Y.reshape(AL.shape) # after this line, Y is the same shape as AL
         dAL = - (np.divide(Y, AL) - np.divide(1 - Y, 1 - AL))
-    elif cost_type == "multinoulli":
+    elif activation_list[-1] == "softmax":
         #dAL = AL
         I = np.zeros((K,m)); I[Y-Y_start,range(m)] = 1
         dAL = I
         
- # if keep_prob < 1:
- #       current_caches = caches[L-1][:1]
- #   else:      
-        current_cache = caches[L-1]
-    
-    
+   
+    current_cache = caches[L-1]
     grads["dA" + str(L)], grads["dW" + str(L)], grads["db" + str(L)] = linear_activation_backward(dAL, current_cache, activation_list[L-1])
     
     for l in reversed(range(L-1)):
@@ -588,9 +582,9 @@ def plot_decision_boundary(model, X, y):
     plt.scatter(X[0, :], X[1, :], c=y, cmap=plt.cm.Spectral)
     plt.show()
 #%%
-def model(X, Y, layer_dims, activation_list, cost_type , optimizer, learning_rate = 0.0007, mini_batch_size = 64, beta = 0.9,
-          beta1 = 0.9, beta2 = 0.999,  epsilon = 1e-8, num_epochs = 10000, print_cost = True,
-          lambd = 0, keep_prob = 1,Y_start = 0):
+def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, mini_batch_size = 64, beta = 0.9,
+          beta1 = 0.9, beta2 = 0.999,  epsilon = 1e-8, num_epochs = 10000, print_cost = True, print_every = 1000,
+          lambd = 0, keep_prob = 1,Y_start = 0,init_type = 'He', scale_f =0.01, seed=0):
     """
     L-layer feed forward neural network model which can be run in different optimizer modes.
     
@@ -610,14 +604,14 @@ def model(X, Y, layer_dims, activation_list, cost_type , optimizer, learning_rat
     Returns:
     parameters -- python dictionary containing your updated parameters 
     """
-
+    layer_dims = [X.shape[0]]+ layer_dims
     L = len(layer_dims)             # number of layers in the neural networks
     costs = []                       # to keep track of the cost
     t = 0                            # initializing the counter required for Adam update
     seed = 10
     
     # Initialize parameters
-    parameters = initialize_parameters(layer_dims,init_type = 'He', scale_f =0.01, seed=0)
+    parameters = initialize_parameters(layer_dims,init_type, scale_f, seed)
 
     # Initialize the optimizer
     v, s = initialize_optimizer(parameters, optimizer)
@@ -638,10 +632,10 @@ def model(X, Y, layer_dims, activation_list, cost_type , optimizer, learning_rat
             AL, caches = forward_propagation(minibatch_X, parameters, activation_list, keep_prob)
             
             # Compute cost
-            cost = compute_cost(AL, minibatch_Y, cost_type, parameters, lambd) 
+            cost = compute_cost(AL, minibatch_Y, activation_list[-1] , parameters, lambd) 
 
             # Backward propagation 
-            grads = backward_propagation(AL, minibatch_Y, caches, cost_type ,activation_list, lambd, keep_prob , Y_start )
+            grads = backward_propagation(AL, minibatch_Y, caches, activation_list, lambd, keep_prob , Y_start)
 
             # Update parameters
             t = t + 1 # Adam counter
@@ -649,9 +643,9 @@ def model(X, Y, layer_dims, activation_list, cost_type , optimizer, learning_rat
                                                  beta1, beta2, epsilon)
         
         # Print the cost every 1000 epoch
-        if print_cost and i % 1000 == 0:
+        if print_cost and i % print_every == 0:
             print ("Cost after epoch %i: %f" %(i, cost))
-        if print_cost and i % 100 == 0:
+        if print_cost and i % print_every == 0:
             costs.append(cost)
                 
     # plot the cost
@@ -662,7 +656,6 @@ def model(X, Y, layer_dims, activation_list, cost_type , optimizer, learning_rat
     plt.show()
 
     return parameters
-
 #%%
 def dictionary_to_vector(parameters):
     """
@@ -723,7 +716,7 @@ def gradients_to_vector(gradients):
 
     return theta
 #%%
-def gradient_check(parameters, activation_list,cost_type, gradients, X, Y,Y_start = 0,lambd = 0, epsilon = 1e-7):
+def gradient_check(parameters, activation_list, gradients, X, Y,Y_start = 0,lambd = 0, epsilon = 1e-7):
     """
     Checks if backward_propagation_n computes correctly the gradient of the cost output by forward_propagation_n
     
@@ -752,13 +745,13 @@ def gradient_check(parameters, activation_list,cost_type, gradients, X, Y,Y_star
         thetaplus = np.copy(parameters_values)                                                           # Step 1
         thetaplus[i][0] += epsilon                                                                       # Step 2
         AL, _ = forward_propagation(X,vector_to_dictionary(thetaplus,parameters), activation_list)
-        J_plus[i] =  compute_cost(AL, Y, cost_type, vector_to_dictionary(thetaplus,parameters), lambd, Y_start)     # Step 3
+        J_plus[i] =  compute_cost(AL, Y, activation_list[-1], vector_to_dictionary(thetaplus,parameters), lambd, Y_start)     # Step 3
         
         # Compute J_minus[i]. Inputs: "parameters_values, epsilon". Output = "J_minus[i]".
         thetaminus = np.copy(parameters_values)                                                          # Step 1
         thetaminus[i][0] -=  epsilon                                                                     # Step 2  
         AL, _ = forward_propagation(X, vector_to_dictionary(thetaminus,parameters), activation_list)
-        J_minus[i] =  compute_cost(AL, Y, cost_type, vector_to_dictionary(thetaminus,parameters), lambd, Y_start)   # Step 3
+        J_minus[i] =  compute_cost(AL, Y, activation_list[-1], vector_to_dictionary(thetaminus,parameters), lambd, Y_start)   # Step 3
         
         # Compute gradapprox[i]
         gradapprox[i] =(J_plus[i]-J_minus[i])/(2*epsilon)
