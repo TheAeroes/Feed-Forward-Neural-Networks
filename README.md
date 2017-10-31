@@ -20,7 +20,7 @@ layer_dims = [200,200,10]   # dimensions for each layer
 # Running the model
 """
 X -- input data, of shape (input size, number of examples)
-Y -- true "label" vector (1 for blue dot / 0 for red dot), of shape (1, number of examples)
+Y -- true "label" vector starting at zero or Y_start (1, number of examples)
 """
 parameters = nn.model(X_train, Y_train, layer_dims, activation_list, optimizer ='adam', learning_rate = 0.0007, 
                       mini_batch_size =100,beta1 = 0.9, beta2 = 0.999,  epsilon = 1e-8, num_epochs = 100 , 
