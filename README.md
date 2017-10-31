@@ -8,7 +8,9 @@
  -  Regularization: L2 and Dropout
  
  ### Dependencies:
- - Numpy
+ - numpy
+ - matplotlib
+ - math 
  
- ### Installation: 
-`pip install` 
+
+ 
