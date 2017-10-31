@@ -87,10 +87,10 @@ def softmax(z):
     Return:
     s -- softmax(z)
     """
-   # log_s = z  - log_sum_exp(z)
-   # s  = np.exp(log_s)
-    max_z = np.max(z,0)
-    s = np.exp(z-max_z)/np.sum(np.exp(z-max_z),0);
+    log_s = z  - log_sum_exp(z)
+    s  = np.exp(log_s)
+    #max_z = np.max(z,0)
+    #s = np.exp(z-max_z)/np.sum(np.exp(z-max_z),0);
     cache = z
     
     return s , cache
