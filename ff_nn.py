@@ -7,6 +7,7 @@ Created on Thu Oct 12 08:54:16 2017
 import numpy as np
 import matplotlib.pyplot as plt
 import math
+import scipy.sparse as sp
 #%%
 def initialize_parameters(layer_dims, init_type = 'random' , scale_f = 0.01, seed = 0):
     """
@@ -54,8 +55,10 @@ def linear_forward(A, W, b):
     Z -- the input of the activation function, also called pre-activation parameter 
     cache -- a python dictionary containing "A", "W" and "b" ; stored for computing the backward pass efficiently
     """
-    
-    Z = np.dot(W,A)+b
+    if sp.issparse(A):
+        Z = A.T.dot(W.T).T +b   
+    else:
+        Z = np.dot(W,A)+b
     
     assert(Z.shape == (W.shape[0], A.shape[1]))
     cache = (A, W, b)
@@ -249,7 +252,11 @@ def linear_backward(dZ, cache):
     A_prev, W, b = cache
     m = A_prev.shape[1]
 
-    dW = np.dot(dZ,A_prev.T)/m
+    if sp.issparse(A_prev):
+        dW = A_prev.dot(dZ.T).T/m
+    else:
+        dW = np.dot(dZ,A_prev.T)/m
+    
     db = np.sum(dZ,axis=1,keepdims= True)/m
     dA_prev = np.dot(W.T,dZ)
 
@@ -520,7 +527,7 @@ def random_mini_batches(X, Y, mini_batch_size = 64, seed = 0):
     # Step 1: Shuffle (X, Y)
     permutation = list(np.random.permutation(m))
     shuffled_X = X[:, permutation]
-    shuffled_Y = Y[:, permutation].reshape((1,m))
+    shuffled_Y = Y[:, permutation]
 
     # Step 2: Partition (shuffled_X, shuffled_Y). Minus the end case.
     num_complete_minibatches = math.floor(m/mini_batch_size) # number of mini batches of size mini_batch_size in your partitionning
