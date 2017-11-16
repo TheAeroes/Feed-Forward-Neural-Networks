@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import math
 import scipy.sparse as sp
 #%%
-def initialize_parameters(layer_dims, init_type = 'random' , scale_f = 0.01, seed = 0):
+def initialize_parameters(layer_dims, init_type = 'random' , scale_f = 0.01, seed = 0 , init_parameters = []):
     """
     Arguments:
     layer_dims -- python array (list) containing the dimensions of each layer in our network
@@ -29,17 +29,18 @@ def initialize_parameters(layer_dims, init_type = 'random' , scale_f = 0.01, see
         sF = lambda x: np.sqrt(2/x)
     elif init_type == 'Xavier': # Xavier initialization
         sF = lambda x: np.sqrt(1/x)
+    elif init_type == 'Specific': # initialize with specific parameters
+        parameters = init_parameters
+   
+    if init_type !='Specific':    
+        for l in range(1, L):
         
-    for l in range(1, L):
-        
-        parameters['W' + str(l)] = np.random.randn(layer_dims[l], layer_dims[l-1]) * sF(layer_dims[l-1])
-        parameters['b' + str(l)] = np.zeros((layer_dims[l], 1))
+            parameters['W' + str(l)] = np.random.randn(layer_dims[l], layer_dims[l-1]) * sF(layer_dims[l-1])
+            parameters['b' + str(l)] = np.zeros((layer_dims[l], 1))
 
-    
-        assert(parameters['W' + str(l)].shape == (layer_dims[l], layer_dims[l-1]))
-        assert(parameters['b' + str(l)].shape == (layer_dims[l], 1))
- 
-        
+            assert(parameters['W' + str(l)].shape == (layer_dims[l], layer_dims[l-1]))
+            assert(parameters['b' + str(l)].shape == (layer_dims[l], 1))
+     
     return parameters
 #%%
 def linear_forward(A, W, b):
@@ -591,7 +592,7 @@ def plot_decision_boundary(model, X, y):
 #%%
 def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, mini_batch_size = 64, beta = 0.9,
           beta1 = 0.9, beta2 = 0.999,  epsilon = 1e-8, num_epochs = 10000, print_cost = True, print_every = 1000,
-          lambd = 0, keep_prob = 1,Y_start = 0,init_type = 'He', scale_f =0.01, seed=0):
+          lambd = 0, keep_prob = 1,Y_start = 0,init_type = 'He',init_parameters = [], scale_f =0.01, seed=0):
     """
     L-layer feed forward neural network model which can be run in different optimizer modes.
     
@@ -618,7 +619,7 @@ def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, 
     seed = 10
     
     # Initialize parameters
-    parameters = initialize_parameters(layer_dims,init_type, scale_f, seed)
+    parameters = initialize_parameters(layer_dims,init_type, scale_f, seed,init_parameters)
 
     # Initialize the optimizer
     v, s = initialize_optimizer(parameters, optimizer)
@@ -912,10 +913,10 @@ def pool_forward(A_prev, hparameters, mode = "max"):
                 for c in range (n_C):            # loop over the channels of the output volume
                     
                     # Find the corners of the current "slice"
-                    vert_start = h+(stride-1)*(h>0)
-                    vert_end = h+f+(stride-1)*(h>0)
-                    horiz_start = w+(stride-1)*(w>0)
-                    horiz_end = w+f+(stride-1)*(w>0)
+                    vert_start = h+h*(stride-1)
+                    vert_end = h+f+h*(stride-1)
+                    horiz_start = w+w*(stride-1)
+                    horiz_end = w+f+w*(stride-1)
                     
                     # Use the corners to define the current slice on the ith training example of A_prev, channel c. 
                     a_prev_slice = A_prev[i,vert_start:vert_end,horiz_start:horiz_end,c]
@@ -1006,3 +1007,115 @@ def conv_backward(dZ, cache):
     assert(dA_prev.shape == (m, n_H_prev, n_W_prev, n_C_prev))
     
     return dA_prev, dW, db
+#%%
+def create_mask_from_window(x):
+    """
+    Creates a mask from an input matrix x, to identify the max entry of x.
+    
+    Arguments:
+    x -- Array of shape (f, f)
+    
+    Returns:
+    mask -- Array of the same shape as window, contains a True at the position corresponding to the max entry of x.
+    """
+    
+    ### START CODE HERE ### (≈1 line)
+    mask = x == np.max(x)
+    ### END CODE HERE ###
+    
+    return mask
+#%%
+def distribute_value(dz, shape):
+    """
+    Distributes the input value in the matrix of dimension shape
+    
+    Arguments:
+    dz -- input scalar
+    shape -- the shape (n_H, n_W) of the output matrix for which we want to distribute the value of dz
+    
+    Returns:
+    a -- Array of size (n_H, n_W) for which we distributed the value of dz
+    """
+    
+    ### START CODE HERE ###
+    # Retrieve dimensions from shape (≈1 line)
+    (n_H, n_W) = shape
+    
+    # Compute the value to distribute on the matrix (≈1 line)
+    average = dz/(n_H*n_W)
+    # Create a matrix where every entry is the "average" value (≈1 line)
+    a = average*np.ones((n_H,n_W))
+    ### END CODE HERE ###
+    
+    return a
+#%%
+def pool_backward(dA, cache, mode = "max"):
+    """
+    Implements the backward pass of the pooling layer
+    
+    Arguments:
+    dA -- gradient of cost with respect to the output of the pooling layer, same shape as A
+    cache -- cache output from the forward pass of the pooling layer, contains the layer's input and hparameters 
+    mode -- the pooling mode you would like to use, defined as a string ("max" or "average")
+    
+    Returns:
+    dA_prev -- gradient of cost with respect to the input of the pooling layer, same shape as A_prev
+    """
+    
+    ### START CODE HERE ###
+    
+    # Retrieve information from cache (≈1 line)
+    (A_prev, hparameters) = cache
+    
+    # Retrieve hyperparameters from "hparameters" (≈2 lines)
+    stride = hparameters["stride"]
+    f = hparameters["f"]
+    
+    # Retrieve dimensions from A_prev's shape and dA's shape (≈2 lines)
+    m, n_H_prev, n_W_prev, n_C_prev = A_prev.shape
+    m, n_H, n_W, n_C = dA.shape
+    
+    # Initialize dA_prev with zeros (≈1 line)
+    dA_prev = np.zeros((m, n_H_prev, n_W_prev, n_C))
+    
+    for i in range(m):                       # loop over the training examples
+        
+        # select training example from A_prev (≈1 line)
+        a_prev = A_prev[i,:,:,:]
+        
+        for h in range(n_H):                   # loop on the vertical axis
+            for w in range(n_W):               # loop on the horizontal axis
+                for c in range(n_C):           # loop over the channels (depth)
+                    
+                    # Find the corners of the current "slice" (≈4 lines)
+                    vert_start = h+h*(stride-1)
+                    vert_end = h+f+h*(stride-1)
+                    horiz_start = w+w*(stride-1)
+                    horiz_end = w+f+w*(stride-1)
+                    
+                    # Compute the backward propagation in both modes.
+                    if mode == "max":
+                        
+                        # Use the corners and "c" to define the current slice from a_prev (≈1 line)
+                        a_prev_slice = a_prev[vert_start:vert_end,horiz_start:horiz_end,c]
+                        # Create the mask from a_prev_slice (≈1 line)
+                        mask = create_mask_from_window(a_prev_slice)
+                        # Set dA_prev to be dA_prev + (the mask multiplied by the correct entry of dA) (≈1 line)
+                        dA_prev[i, vert_start: vert_end, horiz_start: horiz_end, c] += mask*dA[i, h, w, c]
+                        
+                    elif mode == "average":
+                        
+                        # Get the value a from dA (≈1 line)
+                        da = dA[i, h, w, c]
+                        # Define the shape of the filter as fxf (≈1 line)
+                        shape = (f,f)
+                        # Distribute it to get the correct slice of dA_prev. i.e. Add the distributed value of da. (≈1 line)
+                        dA_prev[i, vert_start: vert_end, horiz_start: horiz_end, c] += distribute_value(da, shape)
+                        
+    ### END CODE ###
+    
+    # Making sure your output shape is correct
+    assert(dA_prev.shape == A_prev.shape)
+    
+    return dA_prev
+#%%
