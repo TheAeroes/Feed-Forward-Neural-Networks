@@ -317,11 +317,10 @@ def linear_activation_backward(dA, cache, activation ):
     linear_cache, activation_cache = cache
     
     if activation == "ReLU":
-    
+        
         dZ = relu_backward(dA, activation_cache)
         dA_prev, dW, db = linear_backward(dZ, linear_cache)
-    
-        
+           
     elif activation == "sigmoid":
         
         dZ = sigmoid_backward(dA, activation_cache)
@@ -563,13 +562,26 @@ def predict(parameters, X, activation_list):
     predictions -- vector of predictions of our model (red: 0 / blue: 1)
     """
     # Computes probabilities using forward propagation, and classifies based on max predicted probability.
-    AL, cache = forward_propagation(X, parameters, activation_list)
+    AL, _ = forward_propagation(X, parameters, activation_list)
     predictions = np.argmax(AL,axis = 0)
     
     return predictions
 
-def performance_metric(Y,X,parameters,activation_list):
-    predicted_class = predict(parameters, X, activation_list)
+def performance_metric(Y,X,parameters,activation_list, chunk_size =[]):
+    m = X.shape[1] 
+    if not chunk_size:
+        chunk_size = m
+        
+    predicted_class = np.zeros((m)) 
+    num_complete_chunks = math.floor(m/chunk_size)
+    for k in range(0, num_complete_chunks):
+        X_chunk = X[:,k*chunk_size:(k+1)*chunk_size] 
+        predicted_class[k*chunk_size:(k+1)*chunk_size] = predict(parameters,X_chunk,activation_list)
+    
+    if m % chunk_size != 0:
+        X_chunk = X[:,chunk_size*num_complete_chunks:m]
+        predicted_class[chunk_size*num_complete_chunks:m] = predict(parameters,X_chunk,activation_list)
+    #predicted_class = predict(parameters, X, activation_list)
     acc = np.mean(predicted_class == Y)
     return acc
 #%%
@@ -592,7 +604,8 @@ def plot_decision_boundary(model, X, y):
 #%%
 def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, mini_batch_size = 64, beta = 0.9,
           beta1 = 0.9, beta2 = 0.999,  epsilon = 1e-8, num_epochs = 10000, print_cost = True, print_every = 1000,
-          lambd = 0, keep_prob = 1,Y_start = 0,init_type = 'He',init_parameters = [], scale_f =0.01, seed=0):
+          lambd = 0, keep_prob = 1,Y_start = 0,init_type = 'He',init_parameters = [], scale_f =0.01, seed=0 , 
+          early_stopping = False, X_val=[], Y_val=[]):
     """
     L-layer feed forward neural network model which can be run in different optimizer modes.
     
@@ -624,6 +637,14 @@ def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, 
     # Initialize the optimizer
     v, s = initialize_optimizer(parameters, optimizer)
     
+    best_so_far = {}
+    best_so_far['parameters']  = parameters
+    best_so_far['training loss'] = math.inf
+    best_so_far['# optimization updates'] = t
+    
+    if early_stopping:
+        best_so_far['validation loss'] = math.inf
+    
     # Optimization loop
     for i in range(num_epochs):
         
@@ -640,8 +661,28 @@ def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, 
             AL, caches = forward_propagation(minibatch_X, parameters, activation_list, keep_prob)
             
             # Compute cost
-            cost = compute_cost(AL, minibatch_Y, activation_list[-1] , parameters, lambd) 
+            cost = compute_cost(AL, minibatch_Y, activation_list[-1] , parameters, lambd =0) 
 
+            # Compute accuracy
+            #prediction =  np.argmax(AL,axis = 0)
+            
+            
+            if early_stopping :
+                AL_val, _ = forward_propagation(X_val, parameters, activation_list, keep_prob=1)
+                validation_loss = compute_cost(AL_val, Y_val, activation_list[-1] , parameters, lambd=0)
+                if validation_loss < best_so_far ['validation loss']:
+                    best_so_far ['validation loss']  = validation_loss
+                    best_so_far ['parameters'] = parameters
+                    best_so_far ['training loss'] = cost
+                    best_so_far ['# optimization updates'] = t
+            else:
+                if cost < best_so_far['training loss']:
+                    best_so_far ['training loss'] = cost
+                    best_so_far ['# optimization updates'] = t
+                    best_so_far ['parameters'] = parameters
+
+                
+            
             # Backward propagation 
             grads = backward_propagation(AL, minibatch_Y, caches, activation_list, lambd, keep_prob , Y_start)
 
@@ -649,6 +690,9 @@ def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, 
             t = t + 1 # Adam counter
             parameters, v, s = update_parameters(optimizer, parameters, grads, learning_rate, v, beta, s, t, 
                                                  beta1, beta2, epsilon)
+            
+                
+            
         
         # Print the cost every 1000 epoch
         if print_cost and i % print_every == 0:
@@ -663,7 +707,7 @@ def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, 
     plt.title("Learning rate = " + str(learning_rate))
     plt.show()
 
-    return parameters
+    return parameters, best_so_far
 #%%
 def dictionary_to_vector(parameters):
     """
