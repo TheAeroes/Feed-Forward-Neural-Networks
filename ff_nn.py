@@ -8,6 +8,28 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 import scipy.sparse as sp
+
+#%%
+def split_data(per_val,n_points,per_train = [] ,seed = 0):
+    
+    idx_p = np.arange(n_points)
+    
+    np.random.seed(seed)
+    n_val = int(per_val*n_points)
+    idx_val  = np.random.choice(idx_p, size= n_val, replace = False)
+
+    if not per_train:    
+        idx_train = np.setdiff1d(idx_p,idx_val)
+        idx = {'training':idx_train,'validation':idx_val}
+        
+    else:
+        n_train = int(per_train*n_points)
+        idx_train = np.random.choice(np.setdiff1d(idx_p,idx_val), size= n_train, replace = False)
+        idx_test = np.setdiff1d(idx_p,np.concatenate((idx_train,idx_val)))
+        idx = {'training':idx_train,'validation':idx_val,'testing':idx_test}
+
+    
+    return idx
 #%%
 def initialize_parameters(layer_dims, init_type = 'random' , scale_f = 0.01, seed = 0 , init_parameters = []):
     """
@@ -605,7 +627,7 @@ def plot_decision_boundary(model, X, y):
 def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, mini_batch_size = 64, beta = 0.9,
           beta1 = 0.9, beta2 = 0.999,  epsilon = 1e-8, num_epochs = 10000, print_cost = True, print_every = 1000,
           lambd = 0, keep_prob = 1,Y_start = 0,init_type = 'He',init_parameters = [], scale_f =0.01, seed=0 , 
-          early_stopping = False, X_val=[], Y_val=[]):
+          X_val=[], Y_val=[]):
     """
     L-layer feed forward neural network model which can be run in different optimizer modes.
     
@@ -626,7 +648,7 @@ def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, 
     parameters -- python dictionary containing your updated parameters 
     """
     layer_dims = [X.shape[0]]+ layer_dims
-    L = len(layer_dims)             # number of layers in the neural networks
+    #L = len(layer_dims)             # number of layers in the neural networks
     costs = []                       # to keep track of the cost
     t = 0                            # initializing the counter required for Adam update
     seed = 10
@@ -642,8 +664,9 @@ def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, 
     best_so_far['training loss'] = math.inf
     best_so_far['# optimization updates'] = t
     
-    if early_stopping:
+    if X_val.any():
         best_so_far['validation loss'] = math.inf
+        val_costs = []
     
     # Optimization loop
     for i in range(num_epochs):
@@ -667,7 +690,7 @@ def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, 
             #prediction =  np.argmax(AL,axis = 0)
             
             
-            if early_stopping :
+            if X_val.any() :
                 AL_val, _ = forward_propagation(X_val, parameters, activation_list, keep_prob=1)
                 validation_loss = compute_cost(AL_val, Y_val, activation_list[-1] , parameters, lambd=0)
                 if validation_loss < best_so_far ['validation loss']:
@@ -699,9 +722,14 @@ def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, 
             print ("Cost after epoch %i: %f" %(i, cost))
         if print_cost and i % print_every == 0:
             costs.append(cost)
+            if X_val.any():
+                val_costs.append(validation_loss)
                 
     # plot the cost
     plt.plot(costs)
+    if X_val.any():
+        plt.plot(val_costs,'r')
+        plt.plot(best_so_far['# optimization updates']/len(minibatches),best_so_far['validation loss'],'*')
     plt.ylabel('cost')
     plt.xlabel('epochs (per 100)')
     plt.title("Learning rate = " + str(learning_rate))
