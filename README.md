@@ -5,7 +5,7 @@
  -  Activation : ReLU, sigmoid, softmax
  -  Cost functions: Bernoulli and Multinoulli cross-entropy
  -  Optimization: Momentum and ADAM 
- -  Regularization: L2 and Dropout
+ -  Regularization: L2, Early stopping, Dropout
  
  ### Dependencies:
  - numpy
