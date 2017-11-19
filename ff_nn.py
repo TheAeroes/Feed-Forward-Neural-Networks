@@ -28,7 +28,6 @@ def split_data(per_val,n_points,per_train = [] ,seed = 0):
         idx_test = np.setdiff1d(idx_p,np.concatenate((idx_train,idx_val)))
         idx = {'training':idx_train,'validation':idx_val,'testing':idx_test}
 
-    
     return idx
 #%%
 def initialize_parameters(layer_dims, init_type = 'random' , scale_f = 0.01, seed = 0 , init_parameters = []):
@@ -627,7 +626,7 @@ def plot_decision_boundary(model, X, y):
 def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, mini_batch_size = 64, beta = 0.9,
           beta1 = 0.9, beta2 = 0.999,  epsilon = 1e-8, num_epochs = 10000, print_cost = True, print_every = 1000,
           lambd = 0, keep_prob = 1,Y_start = 0,init_type = 'He',init_parameters = [], scale_f =0.01, seed=0 , 
-          X_val=[], Y_val=[]):
+          X_val=[], Y_val=[],validate_every = []):
     """
     L-layer feed forward neural network model which can be run in different optimizer modes.
     
@@ -690,7 +689,7 @@ def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, 
             #prediction =  np.argmax(AL,axis = 0)
             
             
-            if X_val.any() :
+            if X_val.any() and t % validate_every == 0:
                 AL_val, _ = forward_propagation(X_val, parameters, activation_list, keep_prob=1)
                 validation_loss = compute_cost(AL_val, Y_val, activation_list[-1] , parameters, lambd=0)
                 if validation_loss < best_so_far ['validation loss']:
@@ -717,7 +716,7 @@ def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, 
                 
             
         
-        # Print the cost every 1000 epoch
+        # Print the cost every  "print_every" epocs
         if print_cost and i % print_every == 0:
             print ("Cost after epoch %i: %f" %(i, cost))
         if print_cost and i % print_every == 0:
