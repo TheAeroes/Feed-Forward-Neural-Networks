@@ -171,6 +171,9 @@ def linear_activation_forward(A_prev, W, b, activation, keep_prob =1):
     
     elif activation == "softmax":
         A, activation_cache = softmax(Z)
+    elif activation =="linear":
+        A = Z.copy()
+        activation_cache = Z.copy()
  
     assert (A.shape == (W.shape[0], A_prev.shape[1]))
     
@@ -221,7 +224,7 @@ def forward_propagation(X, parameters, activation_list , keep_prob = 1):
             
     return AL, caches
 #%%
-def compute_cost(AL, Y, cost_type, parameters = [], lambd = 0 , onehot = False, Y_start=0):
+def compute_cost(AL, Y, cost_type, parameters = [], lambd = 0, reg_type = 'L2', onehot = False, Y_start=0):
     """
     Implement the cost function
 
@@ -234,14 +237,18 @@ def compute_cost(AL, Y, cost_type, parameters = [], lambd = 0 , onehot = False, 
     """  
     K, m  = AL.shape
     
-    L2_regularization_cost = 0;
+    reg_cost = 0;
     
     if lambd>0:
         L = len(parameters) // 2  # number of layers in the neural network
-        for l in range(1, L): 
-            L2_regularization_cost += np.sum(np.square(parameters['W' + str(l)]))
-        L2_regularization_cost *= lambd/(2*m)
-
+        if reg_type == 'L2':
+            for l in range(1, L): 
+                reg_cost += np.sum(np.square(parameters['W' + str(l)]))
+            reg_cost *= lambd/(2*m)
+        elif reg_type == 'L1':
+            for l in range(1, L): 
+                reg_cost += np.sum(np.abs(parameters['W' + str(l)]))
+            reg_cost *= lambd/m
     
     # Compute loss from aL and y.
     if cost_type == "sigmoid":
@@ -249,10 +256,12 @@ def compute_cost(AL, Y, cost_type, parameters = [], lambd = 0 , onehot = False, 
         #cost = -np.sum(Y*np.log(AL)+(1-Y)*np.log(1-AL))/m
     elif cost_type =='softmax':
         cost = -np.sum(np.log(AL[(Y-Y_start),range(m)]))/m
+    elif cost_type =='linear': 
+        cost = np.sum((Y-AL)**2)/m
         
     cost = np.squeeze(cost)      # To make sure your cost's shape is what we expect (e.g. this turns [[17]] into 17).
 
-    cost += L2_regularization_cost
+    cost += reg_cost
     
     assert(cost.shape == ())
     
@@ -350,10 +359,14 @@ def linear_activation_backward(dA, cache, activation ):
     elif activation == "softmax":
         dZ = softmax_backward(dA, activation_cache)
         dA_prev, dW, db = linear_backward(dZ, linear_cache)
+        
+    elif activation == "linear":
+        dZ = dA
+        dA_prev, dW, db = linear_backward(dZ, linear_cache)
     
     return dA_prev, dW, db
 #%%
-def backward_propagation(AL, Y, caches,activation_list, lambd= 0, keep_prob = 1, Y_start = 0):
+def backward_propagation(AL, Y, caches,activation_list, lambd= 0,reg_type='L2', keep_prob = 1, Y_start = 0):
     """
     Implement the backward propagation for the [LINEAR->RELU] * (L-1) -> LINEAR -> SIGMOID group
     
@@ -383,6 +396,9 @@ def backward_propagation(AL, Y, caches,activation_list, lambd= 0, keep_prob = 1,
         #dAL = AL
         I = np.zeros((K,m)); I[Y-Y_start,range(m)] = 1
         dAL = I
+    elif activation_list[-1] =="linear":
+        dAL = AL-Y
+        
         
    
     current_cache = caches[L-1]
@@ -406,9 +422,11 @@ def backward_propagation(AL, Y, caches,activation_list, lambd= 0, keep_prob = 1,
         
         if lambd ==0: 
             grads["dW" + str(l + 1)] = dW_temp
-        else:
+        elif reg_type =='L2':
             grads["dW" + str(l + 1)] = dW_temp + current_cache[0][1]*lambd/m # adding l2 regularization term
-            
+        elif reg_type =='L1':
+            grads["dW" + str(l + 1)] = dW_temp + np.sign(current_cache[0][1])*lambd/m # adding l1 regularization term
+           
         grads["db" + str(l + 1)] = db_temp
         
     return grads
@@ -584,7 +602,11 @@ def predict(parameters, X, activation_list):
     """
     # Computes probabilities using forward propagation, and classifies based on max predicted probability.
     AL, _ = forward_propagation(X, parameters, activation_list)
-    predictions = np.argmax(AL,axis = 0)
+    
+    if activation_list[-1] =='softmax' or activation_list[-1] =='sigmoid':
+        predictions = np.argmax(AL,axis = 0)
+    else:
+        predictions = AL
     
     return predictions
 
@@ -626,7 +648,7 @@ def plot_decision_boundary(model, X, y):
 def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, mini_batch_size = 64, beta = 0.9,
           beta1 = 0.9, beta2 = 0.999,  epsilon = 1e-8, num_epochs = 10000, print_cost = True, print_every = 1000,
           lambd = 0, keep_prob = 1,Y_start = 0,init_type = 'He',init_parameters = [], scale_f =0.01, seed=0 , 
-          X_val=[], Y_val=[],validate_every = []):
+          X_val=None, Y_val=None,validate_every = None):
     """
     L-layer feed forward neural network model which can be run in different optimizer modes.
     
@@ -663,7 +685,7 @@ def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, 
     best_so_far['training loss'] = math.inf
     best_so_far['# optimization updates'] = t
     
-    if X_val.any():
+    if X_val!=None:
         best_so_far['validation loss'] = math.inf
         val_costs = []
     
@@ -689,14 +711,15 @@ def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, 
             #prediction =  np.argmax(AL,axis = 0)
             
             
-            if X_val.any() and t % validate_every == 0:
-                AL_val, _ = forward_propagation(X_val, parameters, activation_list, keep_prob=1)
-                validation_loss = compute_cost(AL_val, Y_val, activation_list[-1] , parameters, lambd=0)
-                if validation_loss < best_so_far ['validation loss']:
-                    best_so_far ['validation loss']  = validation_loss
-                    best_so_far ['parameters'] = parameters
-                    best_so_far ['training loss'] = cost
-                    best_so_far ['# optimization updates'] = t
+            if X_val!=None: 
+                if t % validate_every == 0:
+                    AL_val, _ = forward_propagation(X_val, parameters, activation_list, keep_prob=1)
+                    validation_loss = compute_cost(AL_val, Y_val, activation_list[-1] , parameters, lambd=0)
+                    if validation_loss < best_so_far ['validation loss']:
+                        best_so_far ['validation loss']  = validation_loss
+                        best_so_far ['parameters'] = parameters
+                        best_so_far ['training loss'] = cost
+                        best_so_far ['# optimization updates'] = t
             else:
                 if cost < best_so_far['training loss']:
                     best_so_far ['training loss'] = cost
@@ -721,12 +744,12 @@ def model(X, Y, layer_dims, activation_list, optimizer, learning_rate = 0.0007, 
             print ("Cost after epoch %i: %f" %(i, cost))
         if print_cost and i % print_every == 0:
             costs.append(cost)
-            if X_val.any():
+            if X_val != None:
                 val_costs.append(validation_loss)
                 
     # plot the cost
     plt.plot(costs)
-    if X_val.any():
+    if X_val!=None:
         plt.plot(val_costs,'r')
         plt.plot(best_so_far['# optimization updates']/len(minibatches),best_so_far['validation loss'],'*')
     plt.ylabel('cost')
