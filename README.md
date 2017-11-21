@@ -2,8 +2,8 @@
 
 ### Capabilities: 
  -  Initialization: Xavier and He et al.  
- -  Activation : ReLU, sigmoid, softmax
- -  Cost functions: Bernoulli and Multinoulli cross-entropy
+ -  Activation : Linear, sigmoid, ReLU, softmax
+ -  Cost functions: Bernoulli, Multinoulli cross-entropy, Gaussain (Identity Covariance)
  -  Optimization: Momentum and ADAM 
  -  Regularization: L2, Early stopping, Dropout
  
